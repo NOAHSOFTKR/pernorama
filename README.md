@@ -18,8 +18,39 @@ Java API that can be wrapped by framework-specific integrations later.
 
 ## Installation
 
-Pernorama is a Gradle project. Build the library locally and depend on
-the resulting jar, or include the project as a Gradle module:
+Pernorama is published to a self-hosted Maven repository at
+`maven.kjh9211.kr`. Add the repository and the dependency:
+
+```groovy
+repositories {
+    maven { url 'https://maven.kjh9211.kr/releases' }
+}
+
+dependencies {
+    implementation 'io.pernorama:pernorama:0.1.0'
+}
+```
+
+```xml
+<repositories>
+    <repository>
+        <id>pernorama</id>
+        <url>https://maven.kjh9211.kr/releases</url>
+    </repository>
+</repositories>
+
+<dependency>
+    <groupId>io.pernorama</groupId>
+    <artifactId>pernorama</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
+The repository serves anonymous reads; no credentials are needed to
+depend on it.
+
+Alternatively, build the library locally and depend on the resulting
+jar, or include the project as a Gradle module:
 
 ```bash
 ./gradlew build
@@ -32,6 +63,22 @@ dependencies {
 ```
 
 Requires Java 21+.
+
+### Publishing a new version
+
+Publishing requires a Reposilite access token scoped to
+`io/pernorama` (`reposiliteUsername`/`reposilitePassword` Gradle
+properties, or `REPOSILITE_USERNAME`/`REPOSILITE_PASSWORD`
+environment variables). Versions ending in `-SNAPSHOT` go to
+`/snapshots`, everything else goes to `/releases`:
+
+```bash
+./gradlew publish
+```
+
+Pushing a `v*` tag also publishes automatically via
+`.github/workflows/publish.yml`, using the `REPOSILITE_USERNAME` /
+`REPOSILITE_PASSWORD` repository secrets.
 
 ## Basic usage
 

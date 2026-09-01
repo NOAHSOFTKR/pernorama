@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'maven-publish'
 }
 
 group = 'io.pernorama'
@@ -9,6 +10,8 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
+    withSourcesJar()
+    withJavadocJar()
 }
 
 repositories {
@@ -23,4 +26,32 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+
+            pom {
+                name = 'Pernorama'
+                description = 'A declarative permission node library for Java.'
+                url = 'https://github.com/kjh9211/pernorama'
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'pernorama'
+            url = version.endsWith('-SNAPSHOT')
+                ? 'https://maven.kjh9211.kr/snapshots'
+                : 'https://maven.kjh9211.kr/releases'
+
+            credentials {
+                username = project.findProperty('reposiliteUsername') ?: System.getenv('REPOSILITE_USERNAME')
+                password = project.findProperty('reposilitePassword') ?: System.getenv('REPOSILITE_PASSWORD')
+            }
+        }
+    }
 }
