@@ -1,6 +1,7 @@
 package pernorama.permission;
 
 import org.junit.jupiter.api.Test;
+import pernorama.exception.InvalidPermissionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,13 +20,23 @@ class PermissionNodeTest {
 
     @Test
     void rejectsBlankOrMalformedInput() {
-        assertThrows(IllegalArgumentException.class, () -> PermissionNode.of(""));
-        assertThrows(IllegalArgumentException.class, () -> PermissionNode.of("   "));
-        assertThrows(IllegalArgumentException.class, () -> PermissionNode.of(null));
-        assertThrows(IllegalArgumentException.class, () -> PermissionNode.of("users..create"));
-        assertThrows(IllegalArgumentException.class, () -> PermissionNode.of(".users"));
-        assertThrows(IllegalArgumentException.class, () -> PermissionNode.of("users."));
-        assertThrows(IllegalArgumentException.class, () -> PermissionNode.of("users.*"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of(""));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("   "));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of(null));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users..create"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of(".users"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users."));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users.*"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users create"));
+    }
+
+    @Test
+    void isValidMirrorsOfWithoutThrowing() {
+        assertTrue(PermissionNode.isValid("users.create"));
+        assertFalse(PermissionNode.isValid(""));
+        assertFalse(PermissionNode.isValid(null));
+        assertFalse(PermissionNode.isValid("users..create"));
+        assertFalse(PermissionNode.isValid("users.*"));
     }
 
     @Test

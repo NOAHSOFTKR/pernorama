@@ -12,6 +12,9 @@ import java.lang.annotation.Target;
  * When used inside a class annotated with {@link PermGroup}, the value
  * declared here is treated as relative to the group name, and the two
  * are joined with {@code "."} to form the final permission node.
+ * <p>
+ * {@code @Perm} on a method is not inherited by an overriding method; see
+ * {@link PermissionAnnotationResolver} for the exact resolution rule.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.TYPE})

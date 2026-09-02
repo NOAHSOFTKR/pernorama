@@ -1,7 +1,7 @@
 package pernorama.interceptor;
 
 import pernorama.annotation.Perm;
-import pernorama.annotation.PermGroup;
+import pernorama.annotation.PermissionAnnotationResolver;
 import pernorama.exception.PermissionDeniedException;
 import pernorama.subject.PermissionSubject;
 
@@ -11,12 +11,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Invokes methods on behalf of a {@link PermissionSubject}, enforcing any
  * {@link Perm} declared on the target method before it runs.
  * <p>
  * A method with no {@link Perm} annotation is invoked unconditionally.
+ * Each invocation goes through three separate steps: resolving the
+ * required permission from the method's annotations
+ * ({@link PermissionAnnotationResolver}), evaluating it against the
+ * subject ({@link PermissionSubject#hasPermission(String)}), and only
+ * then reflectively invoking the method.
  */
 public class PermissionInterceptor {
 
@@ -46,9 +52,9 @@ public class PermissionInterceptor {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(method, "method");
 
-        String permission = resolvePermission(method);
-        if (permission != null && !subject.hasPermission(permission)) {
-            throw new PermissionDeniedException(permission, subject);
+        Optional<String> permission = PermissionAnnotationResolver.resolve(method);
+        if (permission.isPresent() && !subject.hasPermission(permission.get())) {
+            throw new PermissionDeniedException(permission.get(), subject);
         }
 
         try {
@@ -77,20 +83,8 @@ public class PermissionInterceptor {
         Objects.requireNonNull(subject, "subject");
         Objects.requireNonNull(method, "method");
 
-        String permission = resolvePermission(method);
-        return permission == null || subject.hasPermission(permission);
-    }
-
-    private String resolvePermission(Method method) {
-        Perm perm = method.getAnnotation(Perm.class);
-        if (perm == null) {
-            return null;
-        }
-        PermGroup group = method.getDeclaringClass().getAnnotation(PermGroup.class);
-        if (group != null) {
-            return group.value() + "." + perm.value();
-        }
-        return perm.value();
+        Optional<String> permission = PermissionAnnotationResolver.resolve(method);
+        return permission.isEmpty() || subject.hasPermission(permission.get());
     }
 
     private Method findMethod(Class<?> type, String methodName, int argCount) {

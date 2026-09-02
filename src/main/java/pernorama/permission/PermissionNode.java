@@ -1,10 +1,11 @@
 package pernorama.permission;
 
+import pernorama.exception.InvalidPermissionException;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /**
  * An immutable, dot-separated permission identifier such as
@@ -12,11 +13,11 @@ import java.util.regex.Pattern;
  * <p>
  * A {@code PermissionNode} always represents a concrete node; it does not
  * carry wildcard segments. Wildcard matching against granted patterns is
- * handled separately by {@link PermissionResolver}.
+ * handled separately by {@link PermissionResolver}, which is also the
+ * single source of truth for what characters a segment may contain.
  */
 public final class PermissionNode {
 
-    private static final Pattern SEGMENT = Pattern.compile("[A-Za-z0-9_-]+");
     private static final String SEPARATOR = ".";
 
     private final String name;
@@ -29,23 +30,48 @@ public final class PermissionNode {
 
     /**
      * Parses the given dot-separated string into a {@code PermissionNode}.
+     * Wildcards ({@code "*"}, {@code "users.*"}) are not valid nodes; use
+     * {@link PermissionResolver#isValidPattern(String)} to validate a
+     * grantable pattern instead.
      *
-     * @throws IllegalArgumentException if the value is blank or contains
-     *         an empty or invalid segment
+     * @throws InvalidPermissionException if the value is blank or
+     *         contains an empty or invalid segment
      */
     public static PermissionNode of(String value) {
+        List<String> segments = parseSegments(value);
+        if (segments == null) {
+            throw new InvalidPermissionException(value);
+        }
+        return new PermissionNode(segments);
+    }
+
+    /**
+     * Returns {@code true} if {@code value} would be accepted by
+     * {@link #of(String)}, without throwing for invalid input.
+     */
+    public static boolean isValid(String value) {
+        return parseSegments(value) != null;
+    }
+
+    /**
+     * Splits and validates {@code value} in a single pass, or returns
+     * {@code null} if it is blank or contains an invalid segment. The
+     * sole implementation {@link #of(String)} and {@link #isValid(String)}
+     * both build on, so they can never disagree on the same input.
+     */
+    private static List<String> parseSegments(String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Permission node must not be blank");
+            return null;
         }
         String[] parts = value.split("\\.", -1);
         List<String> segments = new ArrayList<>(parts.length);
         for (String part : parts) {
-            if (!SEGMENT.matcher(part).matches()) {
-                throw new IllegalArgumentException("Invalid permission node: '" + value + "'");
+            if (!PermissionResolver.isValidSegment(part)) {
+                return null;
             }
             segments.add(part);
         }
-        return new PermissionNode(segments);
+        return segments;
     }
 
     /** The full dotted node name, e.g. {@code "users.create"}. */
