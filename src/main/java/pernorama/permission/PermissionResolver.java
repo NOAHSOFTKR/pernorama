@@ -1,15 +1,23 @@
 package pernorama.permission;
 
+import pernorama.exception.InvalidPermissionException;
+
 import java.util.regex.Pattern;
 
 /**
- * Matches granted permission patterns against required permission nodes,
- * including the wildcard forms {@code "*"} (matches everything) and
- * {@code "users.*"} (matches {@code "users"} and everything under it).
+ * The single component responsible for permission node/pattern syntax
+ * validation and for matching granted permission patterns against
+ * required permission nodes, including the wildcard forms {@code "*"}
+ * (matches everything) and {@code "users.*"} (matches {@code "users"} and
+ * everything under it).
  * <p>
  * A wildcard segment is only meaningful as the final segment of a
  * pattern; it does not appear anywhere else. This keeps matching simple
  * and predictable.
+ * <p>
+ * {@link PermissionNode} delegates its own (non-wildcard) segment
+ * validation here, so there is exactly one definition of what a valid
+ * permission segment looks like.
  */
 public final class PermissionResolver {
 
@@ -18,6 +26,16 @@ public final class PermissionResolver {
     private static final String WILDCARD_SUFFIX = ".*";
 
     private PermissionResolver() {
+    }
+
+    /**
+     * Returns {@code true} if {@code segment} is a valid single segment of
+     * a permission node, i.e. one or more letters, digits, {@code _} or
+     * {@code -}. Does not accept {@code "*"}; use {@link #isValidPattern}
+     * for wildcard-aware validation.
+     */
+    static boolean isValidSegment(String segment) {
+        return SEGMENT.matcher(segment).matches();
     }
 
     /**
@@ -40,7 +58,7 @@ public final class PermissionResolver {
                 }
                 continue;
             }
-            if (!SEGMENT.matcher(segment).matches()) {
+            if (!isValidSegment(segment)) {
                 return false;
             }
         }
@@ -51,12 +69,12 @@ public final class PermissionResolver {
      * Returns {@code true} if the granted {@code pattern} covers the
      * {@code required} permission node.
      *
-     * @throws IllegalArgumentException if {@code pattern} is not a valid
-     *         permission pattern
+     * @throws InvalidPermissionException if {@code pattern} is not a
+     *         valid permission pattern
      */
     public static boolean matches(String pattern, String required) {
         if (!isValidPattern(pattern)) {
-            throw new IllegalArgumentException("Invalid permission pattern: '" + pattern + "'");
+            throw new InvalidPermissionException(pattern);
         }
         if (pattern.equals(WILDCARD)) {
             return true;

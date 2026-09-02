@@ -1,6 +1,7 @@
 package pernorama.permission;
 
 import org.junit.jupiter.api.Test;
+import pernorama.exception.InvalidPermissionException;
 
 import java.util.List;
 
@@ -53,6 +54,6 @@ class PermissionResolverTest {
         assertFalse(PermissionResolver.isValidPattern("users.*.create"));
         assertFalse(PermissionResolver.isValidPattern("users..create"));
 
-        assertThrows(IllegalArgumentException.class, () -> PermissionResolver.matches("users..create", "users.create"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionResolver.matches("users..create", "users.create"));
     }
 }

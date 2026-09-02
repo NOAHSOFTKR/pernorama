@@ -2,6 +2,8 @@ package pernorama.interceptor;
 
 import org.junit.jupiter.api.Test;
 import pernorama.exception.PermissionDeniedException;
+import pernorama.fixture.BaseDocumentService;
+import pernorama.fixture.OverridingDocumentService;
 import pernorama.fixture.UserService;
 import pernorama.subject.MemoryPermissionSubject;
 
@@ -92,5 +94,24 @@ class PermissionInterceptorTest {
 
         assertThrows(NoSuchElementException.class,
                 () -> interceptor.invoke(subject, userService, "doesNotExist"));
+    }
+
+    @Test
+    void enforcesPermissionInheritedFromAnUnoverriddenSuperclassMethod() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject();
+        BaseDocumentService service = new BaseDocumentService();
+
+        assertThrows(PermissionDeniedException.class, () -> interceptor.invoke(subject, service, "read"));
+
+        subject.grant("docs.read");
+        interceptor.invoke(subject, service, "read");
+    }
+
+    @Test
+    void overridingAMethodWithoutRedeclaringPermRemovesTheRequirement() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject();
+        OverridingDocumentService service = new OverridingDocumentService();
+
+        interceptor.invoke(subject, service, "read");
     }
 }

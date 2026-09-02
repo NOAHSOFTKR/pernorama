@@ -6,7 +6,7 @@ import pernorama.subject.PermissionSubject;
  * Thrown when a {@link PermissionSubject} attempts an action that
  * requires a permission node it does not have.
  */
-public class PermissionDeniedException extends RuntimeException {
+public class PermissionDeniedException extends PernoramaException {
 
     private final String requiredPermission;
     private final transient PermissionSubject subject;
