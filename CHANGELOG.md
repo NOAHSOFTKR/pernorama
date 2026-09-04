@@ -17,15 +17,15 @@ the shape 1.0 ships with; see [API Stability](README.md#api-stability).
 - `PermissionAnnotationResolver`, a single cached implementation of the
   `@Perm`/`@PermGroup` resolution rule, shared by `PermissionInterceptor` and
   `PermissionRegistry`.
-- `PernoramaException` hierarchy with `InvalidPermissionException` (carrying the
-  offending value) and `PermissionDeniedException` (carrying the required
-  permission and the subject that lacked it).
+- A `PernoramaException` base type, and `InvalidPermissionException` (carrying
+  the offending value) for values that are not valid permission nodes or
+  patterns.
 - `PermissionRegistry.validate(node)`, which checks both node syntax and
   registration.
-- `MemoryPermissionSubject.grantedPermissions()` and a constructor taking an
-  initial collection of permissions.
 - MIT `LICENSE`, plus license and SCM metadata in the published POM.
-- A `CI` workflow running the test suite on pushes and pull requests.
+- `CHANGELOG.md`.
+- A `CI` workflow running the test suite on pushes to `main` and on pull
+  requests.
 
 ### Changed
 
@@ -34,6 +34,13 @@ the shape 1.0 ships with; see [API Stability](README.md#api-stability).
   the segment pattern.
 - `MemoryPermissionSubject` is now thread-safe, backed by a `ConcurrentHashMap`
   key set.
+- **`MemoryPermissionSubject.grantedPermissions()` no longer has a defined
+  iteration order.** It previously returned a `LinkedHashSet` documented as
+  being in grant order; the switch to a `ConcurrentHashMap` key set drops that
+  guarantee. Sort the result if you depend on a stable order.
+- `PermissionDeniedException` now extends `PernoramaException` instead of
+  `RuntimeException`. Its constructor and accessors are unchanged, so
+  `catch (PermissionDeniedException e)` keeps working.
 - Invalid permission values now throw `InvalidPermissionException` instead of
   `IllegalArgumentException`.
 - The published POM `url` points at `NOAHSOFTKR/pernorama`.
@@ -52,8 +59,8 @@ the shape 1.0 ships with; see [API Stability](README.md#api-stability).
 ### Added
 
 - Initial MVP: `PermissionNode`, `PermissionResolver`, `PermissionSubject`,
-  `MemoryPermissionSubject`, `PermissionRegistry`, `PermissionInterceptor`, and
-  the `@Perm` / `@PermGroup` annotations.
+  `MemoryPermissionSubject`, `PermissionRegistry`, `PermissionInterceptor`,
+  `PermissionDeniedException`, and the `@Perm` / `@PermGroup` annotations.
 - Maven/Gradle publishing to the self-hosted Reposilite repository at
   `maven.kjh9211.kr`, with sources and javadoc jars and a tag-triggered publish
   workflow.
