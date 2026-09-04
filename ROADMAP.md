@@ -12,8 +12,7 @@ need an answer *before* 1.0 rather than after.
 
 ## Where we are today
 
-`0.2.0-beta.1` is the current release. The core is complete and
-documented in [README.md](README.md):
+`0.2.0-beta.1` is the current release, and the core is complete:
 
 - `PermissionNode` — parsing and structure of a dotted node.
 - `PermissionResolver` — the single definition of valid syntax and of
@@ -26,6 +25,10 @@ documented in [README.md](README.md):
 - `PermissionInterceptor`, `Permission`, `PermissionRegistry`.
 - `PernoramaException`, `InvalidPermissionException`,
   `PermissionDeniedException`.
+
+[README.md](README.md) documents all of this except the
+`PernoramaException` base type, which is described only in its own
+javadoc.
 
 The library depends on the JDK only, targets Java 21+, is tested on
 pushes to `main` and on pull requests, and is published to
@@ -43,9 +46,9 @@ is a non-goal, not a backlog entry.
    belong to `PermissionResolver`; annotation resolution belongs to
    `PermissionAnnotationResolver`. A second implementation of either
    is a bug.
-3. **Documented behavior is pinned by tests.** The README examples
-   are compiled and asserted by `ReadmeExamplesTest`; anything the
-   README promises should be enforceable the same way.
+3. **Documented behavior is pinned by tests.** Every runnable README
+   example is compiled and asserted by `ReadmeExamplesTest`; anything
+   the README promises should be enforceable the same way.
 4. **Behavior changes are announced, not silent.** Beta may still
    change the API shape, but only with a `CHANGELOG.md` entry that
    says what to do about it.
@@ -62,9 +65,10 @@ code already documents.
 
 Grants are purely additive today. `revoke` removes an exact string
 previously granted, so it cannot narrow a broader wildcard: after
-`grant("users.*")`, revoking `users.delete` does nothing (this is
-documented, but it is a real gap). There is currently no way to
-express "everything under `users`, except `users.delete`".
+`grant("users.*")`, revoking `users.delete` does nothing. That is
+documented in `PermissionSubject`'s javadoc and pinned by a test, but
+it is not in the README, and it is still a real gap: there is no way
+to express "everything under `users`, except `users.delete`".
 
 The decision is whether to support negation — a `-users.delete`
 prefix form, or a separate deny set on the subject — or to declare it
@@ -102,9 +106,11 @@ discarded — exactly what a CGLIB or dynamic-proxy integration
 produces — accumulate forever. The class javadoc already calls this
 out and says to revisit it before shipping a framework integration.
 
-Direction: make the cache bounded, weakly keyed, or per-resolver
-instance rather than static. This blocks the proxy-based modules
-below, so it lands before them.
+Direction: make the cache bounded or weakly keyed. Moving it to a
+per-resolver instance would work too, but `PermissionAnnotationResolver`
+is a static utility class today, so that variant is an API change and
+not a drop-in fix. This blocks the proxy-based modules below, so it
+lands before them.
 
 *Done when* a test demonstrates that a discarded generated class does
 not stay reachable through the cache.
@@ -113,17 +119,20 @@ not stay reachable through the cache.
 
 `MemoryPermissionSubject.hasPermission` builds a `PermissionNode`
 (splitting the string into segments and joining them back) and then
-`PermissionResolver.matchesAny` re-validates every granted pattern
-with a regex on each call, scanning grants linearly. That is
+`PermissionResolver.matchesAny` scans grants linearly, re-validating
+each pattern it examines with a regex. It stops at the first match, so
+a denied check is the expensive one — it walks every grant. That is
 irrelevant for a subject with a handful of grants and measurable for
 one with hundreds on a request path.
 
 Direction: measure before changing anything. Add a benchmark (a JMH
 source set, or a plain harness — either way, without adding a runtime
-dependency to the core), then consider validating at grant time
-instead of match time, skipping the node round-trip on the `String`
-overload, and only then an indexed structure if the numbers justify
-one.
+dependency to the core), then consider skipping the node round-trip on
+the `String` overload and dropping the re-validation inside `matches`
+— `MemoryPermissionSubject` already validates in `grant`/`revoke`, but
+`matches` is public and documented to throw on a bad pattern, so that
+one is a contract decision, not just an optimization. An indexed
+structure only if the numbers justify one.
 
 *Done when* a repeatable benchmark lives in the repository and any
 optimization leaves the existing semantics tests green.
@@ -136,8 +145,8 @@ ambiguous match by pointing at the `Method` overload. It then calls
 `setAccessible(true)`, which can fail for a type in a module that
 does not open its package.
 
-Direction: state the lookup rule in the README (it is currently only
-visible through the exceptions it throws), consider an overload that
+Direction: state the lookup rule in the README (it is currently only in
+`PermissionInterceptor`'s javadoc), consider an overload that
 takes explicit parameter types, and decide what the module-path story
 is — most likely documenting that the target's package must be open,
 rather than dropping `setAccessible`.
@@ -182,19 +191,25 @@ answered and:
 
 ## After 1.0 — optional modules
 
-These are the integrations the README already names as out of scope
-for the core. Each is a separate artifact so that the core keeps its
-"JDK only" guarantee, which means the build splits into modules
-(`pernorama-core` plus siblings) and probably gains a BOM. Any module
-that proxies annotated methods depends on the cache work in item 3.
+The README already names Spring Security, Discord, JWT, OAuth2, a SQL
+database and Redis as out of scope for Beta, and says they are meant to
+live in separate, optional modules built on `PermissionSubject`. That
+is still where they belong after 1.0: each is a separate artifact so
+the core keeps its "JDK only" guarantee, which means the build splits
+into modules and probably gains a BOM. Splitting also decides what the
+core artifact is called — keeping `io.pernorama:pernorama` for it
+avoids breaking the coordinate every existing user depends on. Any
+module that proxies annotated methods depends on the cache work in
+item 3.
 
 - **Spring** — enforcing `@Perm` through AOP, plus a starter.
 - **Discord** — a `PermissionSubject` backed by a member's roles.
 - **JWT** — a `PermissionSubject` backed by a claim.
 - **Persistence adapters** — a subject backed by a table or a cache.
 - **Documentation generation** — turning a populated
-  `PermissionRegistry` into Markdown or JSON. The registry exists to
-  make this possible; it does not have to live in the core.
+  `PermissionRegistry` into Markdown or JSON. The README already lists
+  generating documentation as a reason the registry exists; actually
+  shipping a generator does not have to happen in the core.
 
 ## Non-goals
 
