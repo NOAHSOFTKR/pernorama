@@ -345,9 +345,13 @@ modules built on top of this interface.
 Pernorama is in Beta (`0.2.0-beta.x`). The public API described in this
 README is intended to be the shape 1.0 ships with, but it may still
 change in a following beta release if a real problem is found — such a
-change will be called out in that release's notes rather than made
-silently. Anything not documented here (package-private members,
+change will be called out in [CHANGELOG.md](CHANGELOG.md) rather than
+made silently. Anything not documented here (package-private members,
 undocumented behavior) may change at any time.
+
+## License
+
+Pernorama is released under the [MIT License](LICENSE).
 
 ---
 

@@ -14,6 +14,7 @@ import pernorama.subject.MemoryPermissionSubject;
 import pernorama.subject.PermissionSubject;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -56,10 +57,15 @@ class ReadmeExamplesTest {
     void permissionNodes() {
         PermissionNode node = PermissionNode.of("users.create");
         assertEquals("users.create", node.name());
+        assertEquals(Optional.of(PermissionNode.of("users")), node.parent());
+        assertTrue(node.isChildOf(PermissionNode.of("users")));
 
-        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users..create"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of(""));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of(" "));
         assertThrows(InvalidPermissionException.class, () -> PermissionNode.of(".users"));
         assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users."));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users..create"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users create"));
     }
 
     @Test
@@ -82,6 +88,10 @@ class ReadmeExamplesTest {
 
         @Perm("create")
         public void create() {
+        }
+
+        @Perm("delete")
+        public void delete() {
         }
     }
 
@@ -130,8 +140,10 @@ class ReadmeExamplesTest {
 
         assertTrue(registry.contains("users.create"));
         assertTrue(registry.validate("users.create"));
-        assertFalse(registry.validate("users.delete"));
-        assertEquals(Set.of(PermissionNode.of("users.create")), Set.copyOf(registry.all()));
+        assertFalse(registry.validate("users.delete_all"));
+        assertEquals(
+                Set.of(PermissionNode.of("users.create"), PermissionNode.of("users.delete")),
+                Set.copyOf(registry.all()));
     }
 
     /** A minimal, storage-agnostic implementation for illustration. */
