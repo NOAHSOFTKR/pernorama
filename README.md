@@ -22,11 +22,11 @@ implementing `PermissionSubject` yourself; see
 ## Installation
 
 Pernorama is published to a self-hosted Maven repository at
-`maven.kjh9211.kr`. Add the repository and the dependency:
+`maven.noahsoft.kr`. Add the repository and the dependency:
 
 ```groovy
 repositories {
-    maven { url 'https://maven.kjh9211.kr/releases' }
+    maven { url 'https://maven.noahsoft.kr/releases' }
 }
 
 dependencies {
@@ -38,7 +38,7 @@ dependencies {
 <repositories>
     <repository>
         <id>pernorama</id>
-        <url>https://maven.kjh9211.kr/releases</url>
+        <url>https://maven.noahsoft.kr/releases</url>
     </repository>
 </repositories>
 
