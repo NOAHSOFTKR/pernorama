@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The self-hosted Reposilite repository is now referred to by its canonical
+  host, `maven.noahsoft.kr`, in the install instructions and the publishing
+  configuration. `maven.kjh9211.kr` is an alias for the same instance and keeps
+  working, so already-published versions do not need to be re-fetched.
+
 ## [0.2.0-beta.1] - 2026-09-04
 
 First Beta release. The public API documented in `README.md` is intended to be
@@ -62,8 +71,9 @@ the shape 1.0 ships with; see [API Stability](README.md#api-stability).
   `MemoryPermissionSubject`, `PermissionRegistry`, `PermissionInterceptor`,
   `PermissionDeniedException`, and the `@Perm` / `@PermGroup` annotations.
 - Maven/Gradle publishing to the self-hosted Reposilite repository at
-  `maven.kjh9211.kr`, with sources and javadoc jars and a tag-triggered publish
+  `maven.noahsoft.kr`, with sources and javadoc jars and a tag-triggered publish
   workflow.
 
+[Unreleased]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.2.0-beta.1...HEAD
 [0.2.0-beta.1]: https://github.com/NOAHSOFTKR/pernorama/releases/tag/v0.2.0-beta.1
 [0.1.0]: https://github.com/NOAHSOFTKR/pernorama/commit/ccd6e69734c4b82c74a905d53afbd46422afe97d

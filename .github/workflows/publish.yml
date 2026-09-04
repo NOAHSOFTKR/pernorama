@@ -16,7 +16,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Publish to maven.kjh9211.kr
+      - name: Publish to maven.noahsoft.kr
         run: ./gradlew publish
         env:
           REPOSILITE_USERNAME: ${{ secrets.REPOSILITE_USERNAME }}

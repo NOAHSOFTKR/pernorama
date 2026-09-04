@@ -58,8 +58,8 @@ publishing {
         maven {
             name = 'pernorama'
             url = version.endsWith('-SNAPSHOT')
-                ? 'https://maven.kjh9211.kr/snapshots'
-                : 'https://maven.kjh9211.kr/releases'
+                ? 'https://maven.noahsoft.kr/snapshots'
+                : 'https://maven.noahsoft.kr/releases'
 
             credentials {
                 username = project.findProperty('reposiliteUsername') ?: System.getenv('REPOSILITE_USERNAME')
