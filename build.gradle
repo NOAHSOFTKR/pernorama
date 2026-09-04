@@ -36,7 +36,20 @@ publishing {
             pom {
                 name = 'Pernorama'
                 description = 'A declarative permission node library for Java.'
-                url = 'https://github.com/kjh9211/pernorama'
+                url = 'https://github.com/NOAHSOFTKR/pernorama'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://github.com/NOAHSOFTKR/pernorama/blob/main/LICENSE'
+                    }
+                }
+
+                scm {
+                    url = 'https://github.com/NOAHSOFTKR/pernorama'
+                    connection = 'scm:git:https://github.com/NOAHSOFTKR/pernorama.git'
+                    developerConnection = 'scm:git:ssh://git@github.com/NOAHSOFTKR/pernorama.git'
+                }
             }
         }
     }
