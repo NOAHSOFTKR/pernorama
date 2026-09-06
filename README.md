@@ -349,6 +349,9 @@ change will be called out in [CHANGELOG.md](CHANGELOG.md) rather than
 made silently. Anything not documented here (package-private members,
 undocumented behavior) may change at any time.
 
+What is still open between Beta and 1.0 — and what 1.0 itself
+commits to — is described in [ROADMAP.md](ROADMAP.md).
+
 ## License
 
 Pernorama is released under the [MIT License](LICENSE).

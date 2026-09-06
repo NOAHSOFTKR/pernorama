@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ROADMAP.md`, describing the hardening planned before 1.0, what
+  1.0 commits to, and which API questions (deny rules, role composition)
+  are still open.
+
 ### Changed
 
 - The self-hosted Reposilite repository is now referred to by its canonical
