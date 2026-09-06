@@ -23,6 +23,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * call racing a {@link #grant(String)}/{@link #revoke(String)} call on
  * another thread may observe either the state before or after that call;
  * it never throws or corrupts state.
+ * <p>
+ * Each call is atomic on its own, but a rule set built from several
+ * calls is not: between {@code grant("users.*")} and
+ * {@code grant("-users.delete")} another thread can observe
+ * {@code users.delete} as permitted, because the broad grant is already
+ * in place and the deny rule that narrows it is not. The same applies
+ * to {@link #MemoryPermissionSubject(Collection)}, which grants its
+ * rules one at a time. Populate the subject before sharing it, or
+ * synchronize a later multi-rule update yourself.
  */
 public class MemoryPermissionSubject implements PermissionSubject {
 

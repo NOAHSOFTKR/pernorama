@@ -37,6 +37,12 @@ import java.util.regex.Pattern;
  * but not {@code users.delete}, and {@code ["-users.*", "users.read"]}
  * permits {@code users.read} and nothing else under {@code users}.
  * A node that no rule covers is not permitted.
+ * <p>
+ * An exact rule covers exactly its own node, and that holds for deny
+ * rules too: {@code "-users.delete"} does not deny
+ * {@code "users.delete.hard"}, which the surrounding {@code "users.*"}
+ * still permits. Deny the subtree with {@code "-users.delete.*"}, which
+ * covers {@code users.delete} and everything under it.
  *
  * <h2>Node syntax</h2>
  * {@link PermissionNode} delegates its own (non-wildcard) validation
@@ -97,10 +103,12 @@ public final class PermissionResolver {
      * {@link #matchesAny(Iterable, String)} to evaluate a whole rule set.
      *
      * @throws InvalidPermissionException if {@code pattern} is not a
-     *         valid permission rule
+     *         valid permission rule, or {@code required} is not a valid
+     *         permission node
      */
     public static boolean matches(String pattern, String required) {
-        validate(pattern);
+        validateRule(pattern);
+        validateNode(required);
         return !isDeny(pattern) && specificity(pattern, required) >= 0;
     }
 
@@ -116,10 +124,12 @@ public final class PermissionResolver {
      * anything, so this returns {@code false} for one.
      *
      * @throws InvalidPermissionException if {@code pattern} is not a
-     *         valid permission rule
+     *         valid permission rule, or {@code required} is not a valid
+     *         permission node
      */
     public static boolean denies(String pattern, String required) {
-        validate(pattern);
+        validateRule(pattern);
+        validateNode(required);
         return isDeny(pattern) && specificity(pattern.substring(1), required) >= 0;
     }
 
@@ -134,16 +144,26 @@ public final class PermissionResolver {
      * in the class documentation: the most specific covering rule
      * decides, a deny rule wins a tie, and a node no rule covers is not
      * permitted.
+     * <p>
+     * Every rule is examined, so an invalid rule anywhere in
+     * {@code patterns} is reported even when an earlier rule already
+     * covers the node. {@code required} is validated as a node, which is
+     * what keeps a caller from asking about something that is not one —
+     * {@code "-users.read"} or {@code "users.*"} — and stepping around a
+     * deny rule that way.
      *
      * @throws InvalidPermissionException if any rule in {@code patterns}
-     *         is not a valid permission rule
+     *         is not a valid permission rule, or {@code required} is not
+     *         a valid permission node
      */
     public static boolean matchesAny(Iterable<String> patterns, String required) {
+        validateNode(required);
+
         int best = -1;
         boolean permitted = false;
 
         for (String pattern : patterns) {
-            validate(pattern);
+            validateRule(pattern);
             boolean deny = isDeny(pattern);
             int score = specificity(deny ? pattern.substring(1) : pattern, required);
             if (score < 0) {
@@ -160,9 +180,15 @@ public final class PermissionResolver {
         return permitted;
     }
 
-    private static void validate(String pattern) {
+    private static void validateRule(String pattern) {
         if (!isValidPattern(pattern)) {
             throw new InvalidPermissionException(pattern);
+        }
+    }
+
+    private static void validateNode(String required) {
+        if (!PermissionNode.isValid(required)) {
+            throw new InvalidPermissionException(required);
         }
     }
 

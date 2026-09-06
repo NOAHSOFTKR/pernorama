@@ -3,6 +3,7 @@ package pernorama.subject;
 import org.junit.jupiter.api.Test;
 import pernorama.exception.InvalidPermissionException;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -92,5 +93,10 @@ class CompositePermissionSubjectTest {
     void rejectsNullSources() {
         assertThrows(NullPointerException.class, () -> new CompositePermissionSubject((PermissionSubject) null));
         assertThrows(NullPointerException.class, () -> new CompositePermissionSubject((PermissionSubject[]) null));
+
+        List<PermissionSubject> withNullElement = new ArrayList<>();
+        withNullElement.add(null);
+
+        assertThrows(NullPointerException.class, () -> new CompositePermissionSubject(withNullElement));
     }
 }

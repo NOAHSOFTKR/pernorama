@@ -104,6 +104,16 @@ class ReadmeExamplesTest {
         assertFalse(auditor.hasPermission("users.create"));
         assertTrue(auditor.hasPermission("users.read"));
 
+        PermissionSubject editor = new MemoryPermissionSubject();
+        editor.grant("users.*");
+        editor.grant("-users.delete.*");
+
+        assertFalse(editor.hasPermission("users.delete"));
+        assertFalse(editor.hasPermission("users.delete.hard"));
+
+        PermissionSubject exactOnly = new MemoryPermissionSubject(List.of("users.*", "-users.delete"));
+        assertTrue(exactOnly.hasPermission("users.delete.hard"));
+
         moderator.revoke("-users.delete");
         assertTrue(moderator.hasPermission("users.delete"));
 
