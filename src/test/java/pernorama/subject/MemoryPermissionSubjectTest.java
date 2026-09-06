@@ -260,4 +260,31 @@ class MemoryPermissionSubjectTest {
             throw new AssertionError("Concurrency test did not finish in time");
         }
     }
+
+    @Test
+    void denyRuleOverridesABroaderWildcardGrant() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject();
+        subject.grant("users.*");
+        subject.grant("-users.delete");
+
+        assertTrue(subject.hasPermission("users.create"));
+        assertFalse(subject.hasPermission("users.delete"));
+    }
+
+    @Test
+    void revokingADenyRuleRestoresTheBroaderGrant() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject(List.of("users.*", "-users.delete"));
+
+        subject.revoke("-users.delete");
+
+        assertTrue(subject.hasPermission("users.delete"));
+    }
+
+    @Test
+    void hasPermissionRejectsADenyRuleAsTheCheckedNode() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject();
+        subject.grant("-users.delete");
+
+        assertThrows(InvalidPermissionException.class, () -> subject.hasPermission("-users.delete"));
+    }
 }

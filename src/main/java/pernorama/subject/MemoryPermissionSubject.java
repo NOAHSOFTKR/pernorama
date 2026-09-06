@@ -11,7 +11,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * An in-memory {@link PermissionSubject} backed by a set of granted
- * permission strings.
+ * permission rules, which may include deny rules such as
+ * {@code "-users.delete"}; {@link pernorama.permission.PermissionResolver}
+ * decides which rule wins when several cover the same node.
  * <p>
  * Thread-safe: {@link #grant(String)}, {@link #revoke(String)} and
  * {@link #hasPermission(String)} may all be called concurrently from
@@ -51,8 +53,8 @@ public class MemoryPermissionSubject implements PermissionSubject {
     }
 
     /**
-     * The raw set of granted permission strings. Iteration order is not
-     * defined.
+     * The raw set of granted rules, deny rules included. Iteration order
+     * is not defined.
      */
     public Set<String> grantedPermissions() {
         return Collections.unmodifiableSet(grantedPermissions);

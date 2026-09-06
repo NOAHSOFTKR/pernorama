@@ -9,12 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ROADMAP.md`, describing the hardening planned before 1.0, what
-  1.0 commits to, and which API questions (deny rules, role composition)
-  are still open.
+- **Deny rules.** A rule prefixed with `-` denies instead of allows, so a
+  broad grant can have exceptions carved out of it:
+  `grant("users.*")` plus `grant("-users.delete")` permits everything
+  under `users` except `users.delete`. The most specific rule covering a
+  node decides — an exact rule beats a wildcard one, a longer wildcard
+  prefix beats a shorter one — and a deny rule wins a tie, so
+  `["-users.*", "users.read"]` permits exactly `users.read` under
+  `users`.
+- `PermissionResolver.denies(pattern, node)`, the mirror of
+  `matches(pattern, node)`, for testing a single deny rule.
+- `CompositePermissionSubject`, a read-only `PermissionSubject` that
+  answers from several other subjects at once — the "a user holds roles,
+  and each role carries permissions" shape. `hasPermission` is true if
+  any source says so, and a deny rule only limits the source holding it;
+  `grant`/`revoke` throw `UnsupportedOperationException`, since the
+  composite has no storage of its own.
+- `ROADMAP.md`, describing the hardening planned before 1.0, what 1.0
+  commits to, and the API questions that had to be answered before the
+  API freezes.
 
 ### Changed
 
+- **`PermissionResolver.matchesAny` now applies deny rules and
+  specificity** rather than returning `true` at the first rule that
+  covers the node. A rule set containing no deny rules answers exactly as
+  it did before. It also no longer stops at the first match: every rule
+  is examined so the most specific one can be found.
+- **`PermissionResolver.matches` now returns `false` for a deny rule.**
+  It answers "does this rule *allow* the node", so `-users.delete` no
+  longer reads as an ordinary node that happens to start with a hyphen.
+- **A permission node may no longer start with `-`.**
+  `PermissionNode.of("-users")` and `PermissionNode.isValid("-users")`
+  now reject it, and `hasPermission("-users")` throws with them, because
+  a leading `-` marks a deny rule. The character stays legal everywhere
+  else in a segment, so `users.soft-delete` is unaffected.
 - The self-hosted Reposilite repository is now referred to by its canonical
   host, `maven.noahsoft.kr`, in the install instructions and the publishing
   configuration. `maven.kjh9211.kr` is an alias for the same instance and keeps

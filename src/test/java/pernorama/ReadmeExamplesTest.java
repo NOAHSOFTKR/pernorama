@@ -10,10 +10,12 @@ import pernorama.permission.Permission;
 import pernorama.permission.PermissionNode;
 import pernorama.permission.PermissionRegistry;
 import pernorama.permission.PermissionResolver;
+import pernorama.subject.CompositePermissionSubject;
 import pernorama.subject.MemoryPermissionSubject;
 import pernorama.subject.PermissionSubject;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -66,6 +68,7 @@ class ReadmeExamplesTest {
         assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users."));
         assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users..create"));
         assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("users create"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("-users.create"));
     }
 
     @Test
@@ -81,6 +84,30 @@ class ReadmeExamplesTest {
         root.grant("*");
 
         assertTrue(root.hasPermission("anything.at.all"));
+    }
+
+    @Test
+    void denyRules() {
+        PermissionSubject moderator = new MemoryPermissionSubject();
+        moderator.grant("users.*");
+        moderator.grant("-users.delete");
+
+        assertTrue(moderator.hasPermission("users.create"));
+        assertFalse(moderator.hasPermission("users.delete"));
+
+        PermissionSubject auditor = new MemoryPermissionSubject();
+        auditor.grant("*");
+        auditor.grant("-users.*");
+        auditor.grant("users.read");
+
+        assertTrue(auditor.hasPermission("posts.read"));
+        assertFalse(auditor.hasPermission("users.create"));
+        assertTrue(auditor.hasPermission("users.read"));
+
+        moderator.revoke("-users.delete");
+        assertTrue(moderator.hasPermission("users.delete"));
+
+        assertTrue(PermissionNode.isValid("users.soft-delete"));
     }
 
     @PermGroup("users")
@@ -174,5 +201,20 @@ class ReadmeExamplesTest {
 
         assertTrue(user.hasPermission("users.create"));
         assertTrue(Permission.check(user, "users.create"));
+    }
+
+    @Test
+    void rolesAndComposition() {
+        PermissionSubject admins = new MemoryPermissionSubject(List.of("users.*"));
+        PermissionSubject own = new MemoryPermissionSubject(List.of("profile.edit"));
+
+        PermissionSubject user = new CompositePermissionSubject(own, admins);
+
+        assertTrue(user.hasPermission("users.create"));
+        assertTrue(user.hasPermission("profile.edit"));
+        assertFalse(user.hasPermission("posts.delete"));
+
+        assertThrows(UnsupportedOperationException.class, () -> user.grant("posts.delete"));
+        assertThrows(UnsupportedOperationException.class, () -> user.revoke("users.create"));
     }
 }

@@ -78,4 +78,17 @@ class PermissionNodeTest {
 
         assertTrue(create.isChildOf("users"));
     }
+
+    @Test
+    void rejectsDenyRulesAsNodes() {
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("-users"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionNode.of("-users.delete"));
+        assertFalse(PermissionNode.isValid("-users.delete"));
+    }
+
+    @Test
+    void hyphenIsStillLegalInsideASegment() {
+        assertTrue(PermissionNode.isValid("users.soft-delete"));
+        assertEquals("users.soft-delete", PermissionNode.of("users.soft-delete").name());
+    }
 }
