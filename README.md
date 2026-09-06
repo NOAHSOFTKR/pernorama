@@ -138,6 +138,7 @@ The following are all invalid and throw `InvalidPermissionException`:
 "users."        // trailing empty segment
 "users..create" // empty segment in the middle
 "users create"  // space is not an allowed character
+"-users.create" // a leading - marks a deny rule, not a node
 ```
 
 `PermissionNode` always represents a concrete, non-wildcard node.
@@ -171,6 +172,70 @@ root.hasPermission("anything.at.all"); // true
 A wildcard is only meaningful as the final segment of a granted pattern.
 The matching rule itself lives in one place, `PermissionResolver`, so it
 is never re-implemented differently in different parts of the library.
+
+## Deny Rules
+
+A rule prefixed with `-` denies instead of allows, so a broad grant can
+have exceptions carved out of it:
+
+```java
+PermissionSubject moderator = new MemoryPermissionSubject();
+moderator.grant("users.*");
+moderator.grant("-users.delete");
+
+moderator.hasPermission("users.create"); // true
+moderator.hasPermission("users.delete"); // false
+```
+
+**The most specific rule covering the node decides**, and a deny rule
+wins a tie. Specificity is: an exact rule beats a wildcard rule, and
+between two wildcard rules the one with more segments before the `*`
+wins (`users.profile.*` beats `users.*`, which beats `*`). So the
+reverse arrangement works too — deny a group and allow one node back
+into it:
+
+```java
+PermissionSubject auditor = new MemoryPermissionSubject();
+auditor.grant("*");
+auditor.grant("-users.*");
+auditor.grant("users.read");
+
+auditor.hasPermission("posts.read");   // true, from *
+auditor.hasPermission("users.create"); // false, from -users.*
+auditor.hasPermission("users.read");   // true, the exact rule wins
+```
+
+A node that no rule covers is still not permitted; deny rules are for
+overriding a broader grant, not for expressing the default.
+
+An exact rule covers exactly its own node, and that holds for deny
+rules too — `-users.delete` does **not** deny `users.delete.hard`,
+which the surrounding `users.*` still permits. Deny the wildcard form
+to close a subtree:
+
+```java
+PermissionSubject editor = new MemoryPermissionSubject();
+editor.grant("users.*");
+editor.grant("-users.delete.*"); // users.delete and everything under it
+
+editor.hasPermission("users.delete");      // false
+editor.hasPermission("users.delete.hard"); // false
+```
+
+`revoke` removes a rule by its exact string, deny rules included, so
+`revoke("-users.delete")` puts `users.delete` back under the
+`users.*` grant.
+
+Because a leading `-` marks a deny rule, **a permission node may never
+start with `-`**. The character is still legal anywhere else, so
+`users.soft-delete` is an ordinary node.
+
+`PermissionResolver` exposes the single-rule primitives behind all of
+this: `matches(rule, node)` answers "does this rule *allow* the node"
+and is therefore `false` for any deny rule, and `denies(rule, node)` is
+its mirror. `matchesAny(rules, node)` is the one that applies the
+precedence above to a whole set — it is what `MemoryPermissionSubject`
+calls, and what a custom subject should call too.
 
 ## Annotations
 
@@ -296,7 +361,8 @@ class JwtPrincipal implements PermissionSubject { /* backed by a JWT claim */ }
 
 At minimum, `hasPermission`/`grant`/`revoke` need to agree on how
 granted strings are matched. Reusing `PermissionResolver` gets you the
-same wildcard semantics as `MemoryPermissionSubject` for free:
+same wildcard and deny-rule semantics as `MemoryPermissionSubject` for
+free:
 
 ```java
 class DatabaseUser implements PermissionSubject {
@@ -324,12 +390,55 @@ Spring Security, Discord, JWT, OAuth2, a SQL database, or Redis — those
 remain out of scope for Beta and are meant to live in separate, optional
 modules built on top of this interface.
 
+## Roles and Composition
+
+`CompositePermissionSubject` answers from several subjects at once —
+the usual "a user holds roles, and each role carries permissions"
+shape:
+
+```java
+PermissionSubject admins = new MemoryPermissionSubject(List.of("users.*"));
+PermissionSubject own = new MemoryPermissionSubject(List.of("profile.edit"));
+
+PermissionSubject user = new CompositePermissionSubject(own, admins);
+
+user.hasPermission("users.create"); // true, from the admins role
+user.hasPermission("profile.edit"); // true, from the user's own grants
+user.hasPermission("posts.delete"); // false, from neither
+```
+
+The sources can be any `PermissionSubject`, so a role loaded from your
+database and an in-memory set of personal grants compose the same way.
+
+`hasPermission` is `true` if **any** source says so. Each source
+evaluates its own rules on its own, which means **a deny rule only
+limits the source holding it** — if one role denies `users.delete` and
+another source grants it, the answer is `true`.
+
+So a deny rule cannot ban one subject from something another source
+grants: a composite of a personal `-users.delete` and an
+everyone-role `*` permits `users.delete`. Take the permission out of
+the source that grants it, or give that subject a narrower role;
+composing sources adds permissions, it never subtracts them.
+
+A composite is read-only: it has no storage of its own, so `grant` and
+`revoke` throw `UnsupportedOperationException`. Modify the source you
+actually mean instead.
+
 ## Thread Safety
 
 - **`MemoryPermissionSubject`** — thread-safe. `grant`, `revoke` and
   `hasPermission` may be called concurrently from multiple threads
   without external synchronization; the backing store is a
-  `ConcurrentHashMap` key set, so reads never block on writes.
+  `ConcurrentHashMap` key set, so reads never block on writes. Each
+  call is atomic on its own, but a *multi-rule* update is not: between
+  `grant("users.*")` and `grant("-users.delete")` another thread can
+  still see `users.delete` permitted. Pass the whole rule set to the
+  constructor before the subject is shared, or synchronize the update
+  yourself.
+- **`CompositePermissionSubject`** — immutable in itself; its source
+  list is copied when it is constructed. Whether concurrent use is safe
+  therefore depends entirely on the subjects it was given.
 - **`PermissionRegistry`** — not thread-safe. It is meant to be
   populated once at startup, on a single thread, before checks begin.
 - **`PermissionNode`, `PermissionResolver`, `PermissionAnnotationResolver`,

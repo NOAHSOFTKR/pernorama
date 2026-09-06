@@ -6,9 +6,9 @@ are no dates here, ordering may change, and an item may be dropped
 if it turns out not to earn its place. Whatever actually ships is
 recorded in [CHANGELOG.md](CHANGELOG.md).
 
-Items marked **Open question** are decisions that have not been made
-yet. They are listed here because they shape the public API, so they
-need an answer *before* 1.0 rather than after.
+Anything that shapes the public API has to be settled before 1.0
+freezes it. What has been decided so far is recorded under **Settled**
+below; everything after it is still open work.
 
 ## Where we are today
 
@@ -61,43 +61,20 @@ The work between here and 1.0 is hardening: closing the decisions the
 API cannot change later, and paying off the limitations the current
 code already documents.
 
-### 1. Deny rules — Open question
+### Settled
 
-Grants are purely additive today. `revoke` removes an exact string
-previously granted, so it cannot narrow a broader wildcard: after
-`grant("users.*")`, revoking `users.delete` does nothing. That is
-documented in `PermissionSubject`'s javadoc and pinned by a test, but
-it is not in the README, and it is still a real gap: there is no way
-to express "everything under `users`, except `users.delete`".
+- **Deny rules.** A rule prefixed with `-` denies instead of allows, and
+  the most specific rule covering a node decides, with a deny winning a
+  tie. This replaced the additive-only model, in which `revoke` could
+  not narrow a wildcard grant.
+- **Roles and composition.** `CompositePermissionSubject` answers from
+  several subjects at once. It is read-only, and a deny rule limits only
+  the source that holds it.
 
-The decision is whether to support negation — a `-users.delete`
-prefix form, or a separate deny set on the subject — or to declare it
-out of scope. It cannot be deferred past 1.0: it changes the
-`PermissionResolver.matches` contract and therefore every custom
-`PermissionSubject` that reuses it. Note that a `-` prefix is not
-free either: `-` is a legal character inside a segment today, so
-`-users.delete` is currently a valid node, and giving it a second
-meaning would be a breaking change to the syntax.
+Both are documented in [README.md](README.md) and recorded in
+[CHANGELOG.md](CHANGELOG.md). What is left:
 
-*Done when* either the semantics ship with precedence rules
-(deny-wins vs. most-specific-wins) documented and tested, or the
-README names negation as a non-goal and points at the workaround
-(grant the narrower nodes explicitly).
-
-### 2. Roles and composition — Open question
-
-"A subject holds roles; roles carry permissions" is the shape most
-applications need, and today every application re-implements it
-inside its own `PermissionSubject`. The options are to ship a
-composing subject in the core (one that delegates to an ordered list
-of other subjects) or to leave it to implementers and document the
-recipe in the README next to
-[Custom PermissionSubject](README.md#custom-permissionsubject).
-
-*Done when* the README either documents a shipped composition type or
-shows the recipe as an example that `ReadmeExamplesTest` compiles.
-
-### 3. The annotation cache lifetime
+### 1. The annotation cache lifetime
 
 `PermissionAnnotationResolver` caches resolution per `Method` in a
 static, unbounded map. A `Method` pins its declaring `Class`, and
@@ -115,15 +92,16 @@ lands before them.
 *Done when* a test demonstrates that a discarded generated class does
 not stay reachable through the cache.
 
-### 4. Check-path cost
+### 2. Check-path cost
 
 `MemoryPermissionSubject.hasPermission` builds a `PermissionNode`
 (splitting the string into segments and joining them back) and then
-`PermissionResolver.matchesAny` scans grants linearly, re-validating
-each pattern it examines with a regex. It stops at the first match, so
-a denied check is the expensive one — it walks every grant. That is
-irrelevant for a subject with a handful of grants and measurable for
-one with hundreds on a request path.
+`PermissionResolver.matchesAny` scans the rules linearly, re-validating
+each one with a regex. Since deny rules landed it can no longer stop at
+the first match — it has to see every rule to find the most specific
+one — so every check now costs a full pass. That is irrelevant for a
+subject with a handful of rules and measurable for one with hundreds on
+a request path.
 
 Direction: measure before changing anything. Add a benchmark (a JMH
 source set, or a plain harness — either way, without adding a runtime
@@ -137,7 +115,7 @@ structure only if the numbers justify one.
 *Done when* a repeatable benchmark lives in the repository and any
 optimization leaves the existing semantics tests green.
 
-### 5. `PermissionInterceptor` method lookup
+### 3. `PermissionInterceptor` method lookup
 
 `invoke(subject, target, methodName, args...)` selects a method by
 name and argument *count* among public methods, and rejects an
@@ -151,7 +129,7 @@ takes explicit parameter types, and decide what the module-path story
 is — most likely documenting that the target's package must be open,
 rather than dropping `setAccessible`.
 
-### 6. Registry sharpening
+### 4. Registry sharpening
 
 `PermissionRegistry` is deliberately not thread-safe and is meant to
 be populated once at startup. Two follow-ups:
@@ -172,8 +150,7 @@ subclass.
 ## 1.0.0
 
 1.0 is a promise, so it is defined by what stops changing rather than
-by a feature list. It ships when the open questions above are
-answered and:
+by a feature list. It ships when the items above are done and:
 
 - **The documented API is frozen** under semantic versioning, with a
   mechanical guard in CI (`japicmp` or Revapi) so an accidental
@@ -200,7 +177,7 @@ into modules and probably gains a BOM. Splitting also decides what the
 core artifact is called — keeping `io.pernorama:pernorama` for it
 avoids breaking the coordinate every existing user depends on. Any
 module that proxies annotated methods depends on the cache work in
-item 3.
+item 1.
 
 - **Spring** — enforcing `@Perm` through AOP, plus a starter.
 - **Discord** — a `PermissionSubject` backed by a member's roles.
@@ -226,6 +203,7 @@ item 3.
 
 Open an issue on
 [NOAHSOFTKR/pernorama](https://github.com/NOAHSOFTKR/pernorama/issues)
-— particularly for the **Open question** items, where a concrete use
-case is worth more than a preference. Anything that ships moves from
-here into [CHANGELOG.md](CHANGELOG.md).
+— a concrete use case is worth more than a preference, especially for
+anything that would change a decision already listed as settled.
+Anything that ships moves from here into
+[CHANGELOG.md](CHANGELOG.md).

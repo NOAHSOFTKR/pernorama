@@ -12,9 +12,11 @@ import java.util.Optional;
  * {@code "users.create"}.
  * <p>
  * A {@code PermissionNode} always represents a concrete node; it does not
- * carry wildcard segments. Wildcard matching against granted patterns is
- * handled separately by {@link PermissionResolver}, which is also the
- * single source of truth for what characters a segment may contain.
+ * carry wildcard segments, and it never starts with {@code -}, which
+ * {@link PermissionResolver} reads as the deny-rule marker. Matching
+ * against granted rules is handled separately by
+ * {@link PermissionResolver}, which is also the single source of truth
+ * for what characters a segment may contain.
  */
 public final class PermissionNode {
 
@@ -30,12 +32,13 @@ public final class PermissionNode {
 
     /**
      * Parses the given dot-separated string into a {@code PermissionNode}.
-     * Wildcards ({@code "*"}, {@code "users.*"}) are not valid nodes; use
+     * Wildcards ({@code "*"}, {@code "users.*"}) and deny rules
+     * ({@code "-users.delete"}) are not valid nodes; use
      * {@link PermissionResolver#isValidPattern(String)} to validate a
-     * grantable pattern instead.
+     * grantable rule instead.
      *
-     * @throws InvalidPermissionException if the value is blank or
-     *         contains an empty or invalid segment
+     * @throws InvalidPermissionException if the value is blank, starts
+     *         with {@code -}, or contains an empty or invalid segment
      */
     public static PermissionNode of(String value) {
         List<String> segments = parseSegments(value);
@@ -55,12 +58,13 @@ public final class PermissionNode {
 
     /**
      * Splits and validates {@code value} in a single pass, or returns
-     * {@code null} if it is blank or contains an invalid segment. The
+     * {@code null} if it is blank, is a deny rule, or contains an invalid
+     * segment. The
      * sole implementation {@link #of(String)} and {@link #isValid(String)}
      * both build on, so they can never disagree on the same input.
      */
     private static List<String> parseSegments(String value) {
-        if (value == null || value.isBlank()) {
+        if (value == null || value.isBlank() || PermissionResolver.isDeny(value)) {
             return null;
         }
         String[] parts = value.split("\\.", -1);

@@ -9,12 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ROADMAP.md`, describing the hardening planned before 1.0, what
-  1.0 commits to, and which API questions (deny rules, role composition)
-  are still open.
+- **Deny rules.** A rule prefixed with `-` denies instead of allows, so a
+  broad grant can have exceptions carved out of it:
+  `grant("users.*")` plus `grant("-users.delete")` permits everything
+  under `users` except `users.delete`. The most specific rule covering a
+  node decides — an exact rule beats a wildcard one, a longer wildcard
+  prefix beats a shorter one — and a deny rule wins a tie, so
+  `["-users.*", "users.read"]` permits exactly `users.read` under
+  `users`.
+- `PermissionResolver.denies(pattern, node)`, the mirror of
+  `matches(pattern, node)`, for testing a single deny rule.
+- `CompositePermissionSubject`, a read-only `PermissionSubject` that
+  answers from several other subjects at once — the "a user holds roles,
+  and each role carries permissions" shape. `hasPermission` is true if
+  any source says so, and a deny rule only limits the source holding it;
+  `grant`/`revoke` throw `UnsupportedOperationException`, since the
+  composite has no storage of its own.
+- `ROADMAP.md`, describing the hardening planned before 1.0, what 1.0
+  commits to, and the API questions that had to be answered before the
+  API freezes.
 
 ### Changed
 
+- **`PermissionResolver.matchesAny` now applies deny rules and
+  specificity** rather than returning `true` at the first rule that
+  covers the node, and no longer stops at the first match: every rule is
+  examined so the most specific one can be found. A rule set containing
+  no deny rules gives the same answer as before, with one exception —
+  because every rule is now validated, a malformed rule that used to sit
+  unreached behind a matching one (`["*", "users..bad"]`) now throws
+  `InvalidPermissionException` on every check. Subjects that validate on
+  `grant`, `MemoryPermissionSubject` among them, cannot hold such a rule
+  in the first place.
+- **`PermissionResolver.matches`, `denies` and `matchesAny` now validate
+  the required node**, not just the rules, and throw
+  `InvalidPermissionException` for a value that is not one. Without this
+  a caller could ask about `-users.read` or `users.*` and get an answer
+  that stepped around a deny rule; a custom subject that passes its
+  argument straight through now reports an invalid node the way
+  `PermissionSubject` says it should.
+- **`PermissionResolver.matches` now returns `false` for a deny rule.**
+  It answers "does this rule *allow* the node", so `-users.delete` no
+  longer reads as an ordinary node that happens to start with a hyphen.
+- **A permission node may no longer start with `-`.**
+  `PermissionNode.of("-users")` and `PermissionNode.isValid("-users")`
+  now reject it, and `hasPermission("-users")` throws with them, because
+  a leading `-` marks a deny rule. The character stays legal everywhere
+  else in a segment, so `users.soft-delete` is unaffected.
+- **A stored grant that begins with `-` changes meaning.** It used to be
+  an inert grant of an oddly-named node; it is now an active deny that
+  can remove access a wildcard grant would otherwise give. Nothing
+  rejected such strings before, so check existing stored permissions for
+  a leading `-` before upgrading.
 - The self-hosted Reposilite repository is now referred to by its canonical
   host, `maven.noahsoft.kr`, in the install instructions and the publishing
   configuration. `maven.kjh9211.kr` is an alias for the same instance and keeps

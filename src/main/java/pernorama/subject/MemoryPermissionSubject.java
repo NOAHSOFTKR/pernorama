@@ -11,7 +11,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * An in-memory {@link PermissionSubject} backed by a set of granted
- * permission strings.
+ * permission rules, which may include deny rules such as
+ * {@code "-users.delete"}; {@link pernorama.permission.PermissionResolver}
+ * decides which rule wins when several cover the same node.
  * <p>
  * Thread-safe: {@link #grant(String)}, {@link #revoke(String)} and
  * {@link #hasPermission(String)} may all be called concurrently from
@@ -21,6 +23,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * call racing a {@link #grant(String)}/{@link #revoke(String)} call on
  * another thread may observe either the state before or after that call;
  * it never throws or corrupts state.
+ * <p>
+ * Each call is atomic on its own, but a rule set built from several
+ * calls is not: between {@code grant("users.*")} and
+ * {@code grant("-users.delete")} another thread can observe
+ * {@code users.delete} as permitted, because the broad grant is already
+ * in place and the deny rule that narrows it is not. The same applies
+ * to {@link #MemoryPermissionSubject(Collection)}, which grants its
+ * rules one at a time. Populate the subject before sharing it, or
+ * synchronize a later multi-rule update yourself.
  */
 public class MemoryPermissionSubject implements PermissionSubject {
 
@@ -51,8 +62,8 @@ public class MemoryPermissionSubject implements PermissionSubject {
     }
 
     /**
-     * The raw set of granted permission strings. Iteration order is not
-     * defined.
+     * The raw set of granted rules, deny rules included. Iteration order
+     * is not defined.
      */
     public Set<String> grantedPermissions() {
         return Collections.unmodifiableSet(grantedPermissions);

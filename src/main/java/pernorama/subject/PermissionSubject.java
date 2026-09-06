@@ -37,12 +37,16 @@ public interface PermissionSubject {
     }
 
     /**
-     * Grants a permission to this subject. {@code node} may be a
-     * concrete node (e.g. {@code "users.create"}) or a wildcard pattern
-     * (e.g. {@code "users.*"} or {@code "*"}).
+     * Grants a permission rule to this subject. {@code node} may be a
+     * concrete node (e.g. {@code "users.create"}), a wildcard pattern
+     * (e.g. {@code "users.*"} or {@code "*"}), or either of those
+     * prefixed with {@code -} to deny instead of allow (e.g.
+     * {@code "-users.delete"}). See
+     * {@link pernorama.permission.PermissionResolver} for which rule
+     * wins when several cover the same node.
      *
      * @throws InvalidPermissionException if {@code node} is not a
-     *         syntactically valid permission node or pattern
+     *         syntactically valid permission rule
      */
     void grant(String node);
 
@@ -52,14 +56,15 @@ public interface PermissionSubject {
     }
 
     /**
-     * Revokes a previously granted permission. This removes an exact
-     * match of a string previously passed to {@link #grant(String)}; it
-     * does not partially narrow a broader wildcard grant. For example,
-     * revoking {@code "users.create"} after granting {@code "users.*"}
-     * has no effect — revoke {@code "users.*"} itself instead.
+     * Revokes a previously granted rule. This removes an exact match of
+     * a string previously passed to {@link #grant(String)}; it does not
+     * partially narrow a broader wildcard grant. For example, revoking
+     * {@code "users.create"} after granting {@code "users.*"} has no
+     * effect — revoke {@code "users.*"} itself, or grant the deny rule
+     * {@code "-users.create"} to carve that one node out.
      *
      * @throws InvalidPermissionException if {@code node} is not a
-     *         syntactically valid permission node or pattern
+     *         syntactically valid permission rule
      */
     void revoke(String node);
 
