@@ -273,7 +273,8 @@ This is the single rule `PermissionAnnotationResolver` applies; both
 `PermissionInterceptor` and `PermissionRegistry` resolve annotations
 through it, so there is exactly one implementation of this rule, and its
 result is cached per `Method` since it sits on the permission-check hot
-path.
+path. The cache lives on the method's declaring class, so a class that is
+discarded — a generated proxy, say — takes its entries with it.
 
 ### Permission checking without annotations
 
@@ -443,8 +444,8 @@ actually mean instead.
   populated once at startup, on a single thread, before checks begin.
 - **`PermissionNode`, `PermissionResolver`, `PermissionAnnotationResolver`,
   `Permission`, `PermissionInterceptor`** — stateless or immutable, and
-  safe to share across threads. `PermissionAnnotationResolver`'s
-  annotation-resolution cache is itself a `ConcurrentHashMap`.
+  safe to share across threads. `PermissionAnnotationResolver` caches
+  resolution in a `ConcurrentHashMap` per declaring class.
 - Any custom `PermissionSubject` implementation defines its own
   thread-safety; document it the way `MemoryPermissionSubject` does here
   if you expect concurrent callers.
