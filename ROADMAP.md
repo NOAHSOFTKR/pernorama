@@ -1,7 +1,7 @@
 # Roadmap
 
 This file describes where Pernorama is headed after
-`0.2.0-beta.1`. It is a statement of intent, not a schedule: there
+`0.2.0-beta.2`. It is a statement of intent, not a schedule: there
 are no dates here, ordering may change, and an item may be dropped
 if it turns out not to earn its place. Whatever actually ships is
 recorded in [CHANGELOG.md](CHANGELOG.md).
@@ -12,7 +12,7 @@ below; everything after it is still open work.
 
 ## Where we are today
 
-`0.2.0-beta.1` is the current release, and the core is complete:
+`0.2.0-beta.2` is the current release, and the core is complete:
 
 - `PermissionNode` — parsing and structure of a dotted node.
 - `PermissionResolver` — the single definition of valid syntax and of

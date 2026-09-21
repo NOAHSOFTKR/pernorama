@@ -17,7 +17,7 @@ Discord, JWT, a database, or any other integration — you plug those in by
 implementing `PermissionSubject` yourself; see
 [Custom PermissionSubject](#custom-permissionsubject).
 
-> **Status: Beta (`0.2.0-beta.1`)** — see [API Stability](#api-stability).
+> **Status: Beta (`0.2.0-beta.2`)** — see [API Stability](#api-stability).
 
 ## Installation
 
@@ -30,7 +30,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'io.pernorama:pernorama:0.2.0-beta.1'
+    implementation 'io.pernorama:pernorama:0.2.0-beta.2'
 }
 ```
 
@@ -45,7 +45,7 @@ dependencies {
 <dependency>
     <groupId>io.pernorama</groupId>
     <artifactId>pernorama</artifactId>
-    <version>0.2.0-beta.1</version>
+    <version>0.2.0-beta.2</version>
 </dependency>
 ```
 

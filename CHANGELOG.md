@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta.2] - 2026-09-21
+
 ### Added
 
 - **Deny rules.** A rule prefixed with `-` denies instead of allows, so a
@@ -126,6 +128,7 @@ the shape 1.0 ships with; see [API Stability](README.md#api-stability).
   `maven.noahsoft.kr`, with sources and javadoc jars and a tag-triggered publish
   workflow.
 
-[Unreleased]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.2.0-beta.1...HEAD
+[Unreleased]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.2.0-beta.2...HEAD
+[0.2.0-beta.2]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.2.0-beta.1...v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/NOAHSOFTKR/pernorama/releases/tag/v0.2.0-beta.1
 [0.1.0]: https://github.com/NOAHSOFTKR/pernorama/commit/ccd6e69734c4b82c74a905d53afbd46422afe97d
