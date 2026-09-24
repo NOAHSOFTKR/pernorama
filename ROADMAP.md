@@ -70,17 +70,29 @@ code already documents.
 - **Roles and composition.** `CompositePermissionSubject` answers from
   several subjects at once. It is read-only, and a deny rule limits only
   the source that holds it.
-- **The annotation cache lifetime.** `PermissionAnnotationResolver`
-  keeps its per-`Method` results on the declaring class itself, via
-  `ClassValue`, instead of in a static map of its own. A discarded
-  class — what a proxy-based integration generates per target — is no
-  longer reachable through the cache, so its `ClassLoader` can go too.
-  This was the item blocking the proxy-based modules.
 
-Each is documented in [README.md](README.md) and recorded in
+Both are documented in [README.md](README.md) and recorded in
 [CHANGELOG.md](CHANGELOG.md). What is left:
 
-### 1. Check-path cost
+### 1. The annotation cache lifetime
+
+`PermissionAnnotationResolver` caches resolution per `Method` in a
+static, unbounded map. A `Method` pins its declaring `Class`, and
+therefore its `ClassLoader`, so classes generated at runtime and
+discarded — exactly what a CGLIB or dynamic-proxy integration
+produces — accumulate forever. The class javadoc already calls this
+out and says to revisit it before shipping a framework integration.
+
+Direction: make the cache bounded or weakly keyed. Moving it to a
+per-resolver instance would work too, but `PermissionAnnotationResolver`
+is a static utility class today, so that variant is an API change and
+not a drop-in fix. This blocks the proxy-based modules below, so it
+lands before them.
+
+*Done when* a test demonstrates that a discarded generated class does
+not stay reachable through the cache.
+
+### 2. Check-path cost
 
 `MemoryPermissionSubject.hasPermission` builds a `PermissionNode`
 (splitting the string into segments and joining them back) and then
@@ -103,7 +115,7 @@ structure only if the numbers justify one.
 *Done when* a repeatable benchmark lives in the repository and any
 optimization leaves the existing semantics tests green.
 
-### 2. `PermissionInterceptor` method lookup
+### 3. `PermissionInterceptor` method lookup
 
 `invoke(subject, target, methodName, args...)` selects a method by
 name and argument *count* among public methods, and rejects an
@@ -117,7 +129,7 @@ takes explicit parameter types, and decide what the module-path story
 is — most likely documenting that the target's package must be open,
 rather than dropping `setAccessible`.
 
-### 3. Registry sharpening
+### 4. Registry sharpening
 
 `PermissionRegistry` is deliberately not thread-safe and is meant to
 be populated once at startup. Two follow-ups:
@@ -163,9 +175,9 @@ is still where they belong after 1.0: each is a separate artifact so
 the core keeps its "JDK only" guarantee, which means the build splits
 into modules and probably gains a BOM. Splitting also decides what the
 core artifact is called — keeping `io.pernorama:pernorama` for it
-avoids breaking the coordinate every existing user depends on. The cache work that
-any module proxying annotated methods depended on is done, so nothing
-above blocks them.
+avoids breaking the coordinate every existing user depends on. Any
+module that proxies annotated methods depends on the cache work in
+item 1.
 
 - **Spring** — enforcing `@Perm` through AOP, plus a starter.
 - **Discord** — a `PermissionSubject` backed by a member's roles.
