@@ -7,19 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **`PermissionAnnotationResolver`'s cache no longer keeps classes
-  alive.** Resolution results used to live in a static, unbounded
-  `ConcurrentHashMap` keyed by `Method`, and a `Method` pins its
-  declaring class — and therefore that class's `ClassLoader`. Classes
-  generated at runtime and then discarded, which is what a CGLIB or
-  dynamic-proxy integration produces per target, accumulated there for
-  the lifetime of the JVM. The cache now hangs off the declaring class
-  itself, through `ClassValue`, so its entries become unreachable
-  together with the class that owns them. Resolved values, thread
-  safety and the public API are unchanged; nothing to do on upgrade.
-
 ## [0.2.0-beta.2] - 2026-09-21
 
 ### Added
