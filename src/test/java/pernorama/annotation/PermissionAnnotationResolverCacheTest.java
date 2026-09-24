@@ -1,6 +1,8 @@
 package pernorama.annotation;
 
 import org.junit.jupiter.api.Test;
+import pernorama.fixture.BaseDocumentService;
+import pernorama.fixture.RedeclaringDocumentService;
 import pernorama.fixture.UserService;
 
 import java.io.IOException;
@@ -32,14 +34,29 @@ class PermissionAnnotationResolverCacheTest {
         assertCollected(generated);
     }
 
+    /**
+     * The cache is keyed by declaring class first, so two classes that
+     * declare the same signature must not read each other's entry.
+     * <p>
+     * The two fixtures here require <b>different</b> permissions, which is
+     * what makes the assertion discriminating: a cache that confused the
+     * two classes and reused one entry would return the wrong value for the
+     * other. Two loads of the same bytecode would not show that, since both
+     * copies carry the same {@code @Perm}.
+     */
     @Test
     void sameSignatureInTwoClassesResolvesIndependently() throws Exception {
-        Method own = UserService.class.getMethod("createUser");
-        ClassLoader loader = new SingleClassLoader(FIXTURE, bytecodeOf(FIXTURE));
-        Method copy = loader.loadClass(FIXTURE).getMethod("createUser");
+        Method base = BaseDocumentService.class.getMethod("read");
+        Method redeclaring = RedeclaringDocumentService.class.getMethod("read");
 
-        assertNotSame(own.getDeclaringClass(), copy.getDeclaringClass());
-        assertEquals(PermissionAnnotationResolver.resolve(own), PermissionAnnotationResolver.resolve(copy));
+        assertNotSame(base.getDeclaringClass(), redeclaring.getDeclaringClass());
+        assertEquals(Optional.of("docs.read"), PermissionAnnotationResolver.resolve(base));
+        assertEquals(Optional.of("archive.readArchived"), PermissionAnnotationResolver.resolve(redeclaring));
+
+        // Resolve again, now that both are cached, in case the second write
+        // displaced the first.
+        assertEquals(Optional.of("docs.read"), PermissionAnnotationResolver.resolve(base));
+        assertEquals(Optional.of("archive.readArchived"), PermissionAnnotationResolver.resolve(redeclaring));
     }
 
     /**
