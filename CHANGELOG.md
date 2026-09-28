@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A role layer, `pernorama.role`,** for applications that need rules
+  about which roles a target may hold, on top of the unchanged
+  `PermissionSubject` core:
+  - `Role` — a named bundle of permission rules (or a wrapper around an
+    existing `PermissionSubject`), optionally in a group. Its permissions
+    are evaluated by `PermissionResolver`; nothing is re-implemented.
+  - `RoleGroup` — `minAssignments`/`maxAssignments` for related roles,
+    and the `RoleAssignmentPolicy` applied when an assignment would go
+    over the maximum: built-in `REJECT`, `REPLACE_EXISTING`,
+    `REPLACE_OLDEST`, `REPLACE_NEWEST`, or your own returning a
+    `RoleAssignmentDecision`.
+  - `RoleAssignments` — `assign`/`unassign` returning a
+    `RoleAssignmentResult` (`ASSIGNED`, `REPLACED`, `UNASSIGNED`,
+    `NO_CHANGE`, `REJECTED`, plus the roles removed), with idempotent
+    reassignment and replacement applied as one atomic write.
+  - `RoleAssignmentStore`, a read plus compare-and-set contract for
+    persistence adapters, and the in-memory `MemoryRoleAssignmentStore`.
+  - `PermissionResolutionPolicy`, separate from the assignment policy,
+    for combining the permissions of several held roles:
+    `ALLOW_OVERRIDES` (the `CompositePermissionSubject` behavior, and the
+    default) and `DENY_OVERRIDES`, or your own.
+
+  `CompositePermissionSubject` and every other existing type behave as
+  before.
+
 ## [0.2.0-beta.2] - 2026-09-21
 
 ### Added

@@ -26,6 +26,9 @@ below; everything after it is still open work.
 - `PernoramaException`, `InvalidPermissionException`,
   `PermissionDeniedException`.
 
+On top of the core, `pernorama.role` provides roles, role groups and
+role assignments (unreleased; see **Settled** below).
+
 [README.md](README.md) documents all of this except the
 `PernoramaException` base type, which is described only in its own
 javadoc.
@@ -70,8 +73,18 @@ code already documents.
 - **Roles and composition.** `CompositePermissionSubject` answers from
   several subjects at once. It is read-only, and a deny rule limits only
   the source that holds it.
+- **Role groups and assignments.** The `pernorama.role` package adds
+  `Role`, `RoleGroup` cardinality limits, `RoleAssignments` with
+  structured results and atomic replacement, and two separate policy
+  abstractions: `RoleAssignmentPolicy` for which roles may coexist and
+  `PermissionResolutionPolicy` for how their permissions combine. It is
+  a layer over the core, not part of it: a role's permissions are
+  still evaluated by `PermissionResolver`, and a user who only needs
+  `PermissionSubject` never touches it. It lives in the same artifact
+  for now; whether it becomes a separate `pernorama-rbac` artifact is
+  decided with the module split below.
 
-Both are documented in [README.md](README.md) and recorded in
+All of these are documented in [README.md](README.md) and recorded in
 [CHANGELOG.md](CHANGELOG.md). What is left:
 
 ### 1. The annotation cache lifetime
@@ -175,7 +188,9 @@ is still where they belong after 1.0: each is a separate artifact so
 the core keeps its "JDK only" guarantee, which means the build splits
 into modules and probably gains a BOM. Splitting also decides what the
 core artifact is called — keeping `io.pernorama:pernorama` for it
-avoids breaking the coordinate every existing user depends on. Any
+avoids breaking the coordinate every existing user depends on. The
+`pernorama.role` package is the first candidate for its own artifact
+in that split, since it only depends on the core's public API. Any
 module that proxies annotated methods depends on the cache work in
 item 1.
 

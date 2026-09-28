@@ -10,6 +10,14 @@ import pernorama.permission.Permission;
 import pernorama.permission.PermissionNode;
 import pernorama.permission.PermissionRegistry;
 import pernorama.permission.PermissionResolver;
+import pernorama.role.PermissionResolutionPolicy;
+import pernorama.role.Role;
+import pernorama.role.RoleAssignmentDecision;
+import pernorama.role.RoleAssignmentPolicy;
+import pernorama.role.RoleAssignmentResult;
+import pernorama.role.RoleAssignmentStatus;
+import pernorama.role.RoleAssignments;
+import pernorama.role.RoleGroup;
 import pernorama.subject.CompositePermissionSubject;
 import pernorama.subject.MemoryPermissionSubject;
 import pernorama.subject.PermissionSubject;
@@ -226,5 +234,76 @@ class ReadmeExamplesTest {
 
         assertThrows(UnsupportedOperationException.class, () -> user.grant("posts.delete"));
         assertThrows(UnsupportedOperationException.class, () -> user.revoke("users.create"));
+    }
+
+    @Test
+    void roleGroupsAndAssignments() {
+        RoleGroup plan = RoleGroup.builder("plan")
+                .minAssignments(0)
+                .maxAssignments(1)
+                .assignmentPolicy(RoleAssignmentPolicy.REPLACE_EXISTING)
+                .build();
+
+        Role pro = Role.builder("plan_pro")
+                .group(plan)
+                .permission("app.use")
+                .permission("app.plan.pro")
+                .build();
+
+        Role max5 = Role.builder("plan_max_5")
+                .group(plan)
+                .permission("app.use")
+                .permission("app.plan.max5")
+                .build();
+
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+
+        assertEquals(RoleAssignmentStatus.ASSIGNED, assignments.assign("alice", pro).status());
+        RoleAssignmentResult result = assignments.assign("alice", max5);
+
+        assertEquals(RoleAssignmentStatus.REPLACED, result.status());
+        assertEquals(Optional.of(pro), result.previousRole());
+        assertEquals(Optional.of(max5), result.currentRole());
+        assertEquals(List.of(max5), assignments.roles("alice"));
+        assertEquals("[plan_max_5]", assignments.roles("alice").toString());
+
+        PermissionSubject alice = assignments.subject("alice");
+        assertTrue(alice.hasPermission("app.plan.max5"));
+        assertFalse(alice.hasPermission("app.plan.pro"));
+
+        assertEquals(RoleAssignmentStatus.NO_CHANGE, assignments.assign("alice", max5).status());
+    }
+
+    @Test
+    void customRoleAssignmentPolicy() {
+        RoleAssignmentPolicy keepLifetime = (group, held, requested) ->
+                held.stream().anyMatch(r -> r.id().equals("plan_lifetime"))
+                        ? RoleAssignmentDecision.reject("lifetime plans are never replaced")
+                        : RoleAssignmentDecision.replace(held);
+
+        RoleGroup plan = RoleGroup.builder("plan").maxAssignments(1).assignmentPolicy(keepLifetime).build();
+        Role lifetime = Role.builder("plan_lifetime").group(plan).build();
+        Role pro = Role.builder("plan_pro").group(plan).build();
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+
+        assignments.assign("alice", pro);
+        assertEquals(RoleAssignmentStatus.REPLACED, assignments.assign("alice", lifetime).status());
+        assertEquals(RoleAssignmentStatus.REJECTED, assignments.assign("alice", pro).status());
+        assertEquals(List.of(lifetime), assignments.roles("alice"));
+    }
+
+    @Test
+    void permissionResolutionPolicies() {
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+
+        Role editor = Role.builder("editor").permission("users.*").build();
+        Role suspended = Role.builder("suspended").permission("-users.delete").build();
+
+        assignments.assign("bob", editor);
+        assignments.assign("bob", suspended);
+
+        assertTrue(assignments.subject("bob").hasPermission("users.delete"));
+        assertFalse(assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES)
+                .hasPermission("users.delete"));
     }
 }
