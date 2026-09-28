@@ -7,6 +7,7 @@ import pernorama.fixture.UserService;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.Optional;
@@ -29,9 +30,10 @@ class PermissionAnnotationResolverCacheTest {
 
     @Test
     void discardedClassIsNotRetainedByTheCache() throws Exception {
-        WeakReference<Class<?>> generated = resolveAgainstAThrowawayClass();
+        ReferenceQueue<Class<?>> collected = new ReferenceQueue<>();
+        WeakReference<Class<?>> generated = resolveAgainstAThrowawayClass(collected);
 
-        assertCollected(generated);
+        assertCollected(generated, collected);
     }
 
     /**
@@ -65,7 +67,8 @@ class PermissionAnnotationResolverCacheTest {
      * the method, the loader — is a local of this method, so it is all
      * unreachable once this returns.
      */
-    private static WeakReference<Class<?>> resolveAgainstAThrowawayClass() throws Exception {
+    private static WeakReference<Class<?>> resolveAgainstAThrowawayClass(
+            ReferenceQueue<Class<?>> collected) throws Exception {
         ClassLoader loader = new SingleClassLoader(FIXTURE, bytecodeOf(FIXTURE));
         Class<?> generated = loader.loadClass(FIXTURE);
         Method method = generated.getMethod("createUser");
@@ -73,19 +76,31 @@ class PermissionAnnotationResolverCacheTest {
         assertNotSame(UserService.class, generated);
         assertEquals(Optional.of("users.create"), PermissionAnnotationResolver.resolve(method));
 
-        return new WeakReference<>(generated);
+        return new WeakReference<>(generated, collected);
     }
 
-    private static void assertCollected(WeakReference<Class<?>> ref) {
-        for (int attempt = 0; attempt < 50 && ref.get() != null; attempt++) {
+    /**
+     * Waits for the weak reference to be enqueued instead of relying on a
+     * fixed sleep after {@link System#gc()}. Explicit GC is still only a
+     * request, so the loop gives the VM several opportunities to perform
+     * class unloading without making normal CI scheduling part of the
+     * assertion.
+     */
+    private static void assertCollected(
+            WeakReference<Class<?>> ref,
+            ReferenceQueue<Class<?>> collected) {
+        for (int attempt = 0; attempt < 50; attempt++) {
             System.gc();
             try {
-                Thread.sleep(20);
+                if (collected.remove(100) == ref) {
+                    return;
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 fail("interrupted while waiting for the class to be collected");
             }
         }
+
         assertNull(ref.get(), "the resolver cache is still holding the discarded class");
     }
 
