@@ -26,6 +26,9 @@ below; everything after it is still open work.
 - `PernoramaException`, `InvalidPermissionException`,
   `PermissionDeniedException`.
 
+On top of the core, `pernorama.role` provides roles, role groups and
+role assignments (unreleased; see **Settled** below).
+
 [README.md](README.md) documents all of this except the
 `PernoramaException` base type, which is described only in its own
 javadoc.
@@ -76,6 +79,16 @@ code already documents.
   class — what a proxy-based integration generates per target — is no
   longer reachable through the cache, so its `ClassLoader` can go too.
   This was the item blocking the proxy-based modules.
+- **Role groups and assignments.** The `pernorama.role` package adds
+  `Role`, `RoleGroup` cardinality limits, `RoleAssignments` with
+  structured results and atomic replacement, and two separate policy
+  abstractions: `RoleAssignmentPolicy` for which roles may coexist and
+  `PermissionResolutionPolicy` for how their permissions combine. It is
+  a layer over the core, not part of it: a role's permissions are
+  still evaluated by `PermissionResolver`, and a user who only needs
+  `PermissionSubject` never touches it. It lives in the same artifact
+  for now; whether it becomes a separate `pernorama-rbac` artifact is
+  decided with the module split below.
 
 Each is documented in [README.md](README.md) and recorded in
 [CHANGELOG.md](CHANGELOG.md). What is left:
@@ -163,9 +176,11 @@ is still where they belong after 1.0: each is a separate artifact so
 the core keeps its "JDK only" guarantee, which means the build splits
 into modules and probably gains a BOM. Splitting also decides what the
 core artifact is called — keeping `io.pernorama:pernorama` for it
-avoids breaking the coordinate every existing user depends on. The cache work that
-any module proxying annotated methods depended on is done, so nothing
-above blocks them.
+avoids breaking the coordinate every existing user depends on. The
+`pernorama.role` package is the first candidate for its own artifact
+in that split, since it only depends on the core's public API. The
+cache work that any module proxying annotated methods depended on is
+done, so nothing above blocks them.
 
 - **Spring** — enforcing `@Perm` through AOP, plus a starter.
 - **Discord** — a `PermissionSubject` backed by a member's roles.

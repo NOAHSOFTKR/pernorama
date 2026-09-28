@@ -426,6 +426,147 @@ A composite is read-only: it has no storage of its own, so `grant` and
 `revoke` throw `UnsupportedOperationException`. Modify the source you
 actually mean instead.
 
+## Role Groups and Assignments
+
+`CompositePermissionSubject` is enough when you only need to *check*
+permissions from several sources. When roles need rules about which
+of them a user may hold together — "exactly one subscription plan at a
+time" — the `pernorama.role` package adds named roles, groups with
+cardinality limits, and an assignment API that enforces them. It sits
+on top of the core: nothing in `PermissionSubject` changes, and you do
+not need it if you don't use roles.
+
+```java
+RoleGroup plan = RoleGroup.builder("plan")
+        .minAssignments(0)
+        .maxAssignments(1)
+        .assignmentPolicy(RoleAssignmentPolicy.REPLACE_EXISTING)
+        .build();
+
+Role pro = Role.builder("plan_pro")
+        .group(plan)
+        .permission("app.use")
+        .permission("app.plan.pro")
+        .build();
+
+Role max5 = Role.builder("plan_max_5")
+        .group(plan)
+        .permission("app.use")
+        .permission("app.plan.max5")
+        .build();
+
+RoleAssignments<String> assignments = new RoleAssignments<>();
+
+assignments.assign("alice", pro);                                // ASSIGNED
+RoleAssignmentResult result = assignments.assign("alice", max5);
+
+result.status();         // REPLACED
+result.previousRole();   // Optional[plan_pro]
+result.currentRole();    // Optional[plan_max_5]
+assignments.roles("alice"); // [plan_max_5]
+
+PermissionSubject alice = assignments.subject("alice");
+alice.hasPermission("app.plan.max5"); // true
+alice.hasPermission("app.plan.pro");  // false
+```
+
+- **`Role`** — a named bundle of permission rules, or a wrapper around
+  an existing `PermissionSubject` via `.permissions(subject)`, e.g. one
+  loaded from your database. What it permits is answered with the same
+  rules, wildcards and deny semantics as everywhere else; the role layer
+  does no matching of its own. A role is identified by its id, and a
+  target keeps the `Role` instance it was assigned: assigning a new
+  definition with the same id is `NO_CHANGE` and does not update it. To
+  change a role's permissions in place, back it with a subject you
+  update, or store role ids and resolve them in your own
+  `RoleAssignmentStore`.
+- **`RoleGroup`** — `minAssignments`/`maxAssignments` for a set of
+  related roles (defaults: `0` and unbounded), plus the
+  `RoleAssignmentPolicy` that decides what happens when an assignment
+  would go over the maximum. A group is identified by its id, so build
+  each group once and share it: if two roles carry same-id groups with
+  different limits or policies, `RoleAssignments` throws
+  `IllegalStateException` rather than let the choice of role decide
+  which limits apply.
+- **`RoleAssignments`** — `assign`, `unassign`, `roles`, and `subject`
+  for a target identified by any key type (a user id, say). Storage is
+  pluggable through `RoleAssignmentStore`; the default is the in-memory
+  `MemoryRoleAssignmentStore`.
+
+### Assignment rules
+
+- **Assigning a role the target already holds is a no-op**:
+  `NO_CHANGE`, and the group's policy is never consulted.
+- **Going over `maxAssignments`** is handed to the group's policy.
+  `REJECT` (the default) leaves the target as it was; `REPLACE_EXISTING`
+  replaces every role held in the group — in an exclusive group, the one
+  role (so it cannot be combined with a `minAssignments` above 1);
+  `REPLACE_OLDEST` and `REPLACE_NEWEST` replace as few roles as needed,
+  picked by assignment order.
+- **`minAssignments` is enforced on `unassign`**: removing a role that
+  would take the target under the minimum is `REJECTED`. A target that
+  starts under the minimum, as every target does before its first
+  assignment, can still be assigned roles.
+- **A replacement is atomic.** The old roles leave and the new one
+  arrives in a single write, so the target is never seen holding
+  neither. `RoleAssignmentStore` is a read plus a compare-and-set, and
+  that is the contract a database-backed store has to keep — typically
+  with one transaction or a version column.
+- **Every call returns a `RoleAssignmentResult`**: `ASSIGNED`,
+  `REPLACED`, `UNASSIGNED`, `NO_CHANGE` or `REJECTED`, with the roles
+  removed and a rejection reason — enough to emit an audit event from.
+  Pernorama does not store audit logs itself.
+
+A group's policy can also be your own. It receives the group, the
+roles held in it (oldest first) and the requested role, and returns
+`RoleAssignmentDecision.reject(reason)` or
+`RoleAssignmentDecision.replace(roles)`. `RoleAssignments` checks the
+decision before writing anything and throws `IllegalStateException` if
+it would still break the group's limits:
+
+```java
+RoleAssignmentPolicy keepLifetime = (group, held, requested) ->
+        held.stream().anyMatch(r -> r.id().equals("plan_lifetime"))
+                ? RoleAssignmentDecision.reject("lifetime plans are never replaced")
+                : RoleAssignmentDecision.replace(held);
+```
+
+### Combining the permissions of several roles
+
+Which roles may coexist and how their permissions combine are separate
+questions. The second is a `PermissionResolutionPolicy`, passed to
+`subject(target, policy)`:
+
+- **`ALLOW_OVERRIDES`** (the default for `subject(target)`) — permitted
+  if any role permits the node; a deny rule only limits the role holding
+  it. This is exactly `CompositePermissionSubject`'s behavior.
+- **`DENY_OVERRIDES`** — permitted if some role permits the node and no
+  role *explicitly denies* it, so a deny rule in one role vetoes a grant
+  in another. A role that simply does not mention the node vetoes
+  nothing, and only a role built from rules can deny.
+
+```java
+Role editor = Role.builder("editor").permission("users.*").build();
+Role suspended = Role.builder("suspended").permission("-users.delete").build();
+
+assignments.assign("bob", editor);
+assignments.assign("bob", suspended);
+
+assignments.subject("bob").hasPermission("users.delete"); // true
+assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES)
+        .hasPermission("users.delete");                   // false
+```
+
+`PermissionResolutionPolicy` is a one-method interface over the target's
+roles, so a different interpretation — ranking roles by group, say — is
+a lambda away.
+
+The subject is a read-only live view: each check reads the target's
+current roles, and `grant`/`revoke` throw
+`UnsupportedOperationException`. For permissions granted to a user
+directly, compose it: `new CompositePermissionSubject(own,
+assignments.subject("alice"))`.
+
 ## Thread Safety
 
 - **`MemoryPermissionSubject`** — thread-safe. `grant`, `revoke` and
@@ -440,6 +581,14 @@ actually mean instead.
 - **`CompositePermissionSubject`** — immutable in itself; its source
   list is copied when it is constructed. Whether concurrent use is safe
   therefore depends entirely on the subjects it was given.
+- **`RoleAssignments`** — thread-safe as long as its
+  `RoleAssignmentStore` keeps the store contract;
+  `MemoryRoleAssignmentStore` does. Concurrent assignments to the same
+  target never leave a group over its limits: each one re-decides from
+  fresh state if another got there first, so a custom
+  `RoleAssignmentPolicy` may be called more than once and should have no
+  side effects. `Role` (built from rules) and `RoleGroup` are immutable;
+  a role built from a subject is as thread-safe as that subject.
 - **`PermissionRegistry`** — not thread-safe. It is meant to be
   populated once at startup, on a single thread, before checks begin.
 - **`PermissionNode`, `PermissionResolver`, `PermissionAnnotationResolver`,
