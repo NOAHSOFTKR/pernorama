@@ -39,20 +39,34 @@ import java.util.concurrent.ConcurrentHashMap;
  * <h2>Caching</h2>
  * Resolution results are cached per {@link Method}, since this sits on
  * the hot path of every {@link pernorama.interceptor.PermissionInterceptor}
- * invocation. The cache is unbounded and lives for the lifetime of the
- * JVM, keyed by {@link Method} identity (which pins its declaring
- * {@link Class}). This is safe for a normal, fixed set of application
- * classes, but it is <b>not</b> a good fit for classes generated at
- * runtime and then discarded — a CGLIB/dynamic-proxy-heavy framework
- * integration or a hot class-reloading setup would leak a {@code Method}
- * (and its {@code Class}/{@code ClassLoader}) into this cache forever
- * for every regenerated class. Framework integrations that proxy
- * annotated methods are out of scope for this Beta (see the README);
- * revisit this cache before shipping one.
+ * invocation. The cache is held <b>on the declaring {@link Class}</b>
+ * rather than in a map of its own: each class gets its own table of
+ * resolved methods, reachable only through that class. A class that
+ * becomes unreachable takes its cached entries with it, so classes
+ * generated at runtime and then discarded — what a CGLIB or
+ * dynamic-proxy integration produces — do not accumulate here, and
+ * neither do their {@code ClassLoader}s.
+ * <p>
+ * Within a class the table is unbounded and lives as long as the class
+ * does, which for an ordinary application class means the lifetime of
+ * the JVM. That is the intended behavior: the entries are bounded by the
+ * number of methods the class declares.
  */
 public final class PermissionAnnotationResolver {
 
-    private static final ConcurrentHashMap<Method, Optional<String>> CACHE = new ConcurrentHashMap<>();
+    /**
+     * Per-class tables of resolved methods. {@link ClassValue} stores each
+     * value on the class it is keyed by, so an entry is reachable only
+     * while its declaring class is, and no reference back to the class is
+     * kept here.
+     */
+    private static final ClassValue<ConcurrentHashMap<Method, Optional<String>>> CACHE =
+            new ClassValue<>() {
+                @Override
+                protected ConcurrentHashMap<Method, Optional<String>> computeValue(Class<?> declaringClass) {
+                    return new ConcurrentHashMap<>();
+                }
+            };
 
     private PermissionAnnotationResolver() {
     }
@@ -63,7 +77,8 @@ public final class PermissionAnnotationResolver {
      */
     public static Optional<String> resolve(Method method) {
         Objects.requireNonNull(method, "method");
-        return CACHE.computeIfAbsent(method, PermissionAnnotationResolver::doResolve);
+        return CACHE.get(method.getDeclaringClass())
+                .computeIfAbsent(method, PermissionAnnotationResolver::doResolve);
     }
 
     /**
