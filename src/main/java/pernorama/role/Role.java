@@ -41,6 +41,17 @@ import java.util.Set;
  * A role is identified by its {@link #id()}: two roles with the same id
  * are equal, whatever their permissions or group. Assignments are
  * stored and compared by role, so give each distinct role its own id.
+ *
+ * <h2>Definitions do not change under an assignment</h2>
+ * A store keeps the {@code Role} instance it was given. Building a new
+ * role with the same id but different rules or a different group does
+ * not update targets that already hold it: assigning it is
+ * {@link RoleAssignmentStatus#NO_CHANGE}, and those targets keep the old
+ * definition. To change what a role permits without reassigning it,
+ * back the role by a subject you update
+ * ({@link Builder#permissions(PermissionSubject)}), or implement a
+ * {@link RoleAssignmentStore} that stores role ids and resolves them
+ * against your current definitions when it reads.
  * <p>
  * A role built from rules is immutable and safe to share across
  * threads. One backed by a subject is as thread-safe as that subject.

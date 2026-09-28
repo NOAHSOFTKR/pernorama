@@ -70,8 +70,9 @@ public final class RoleAssignments<K> {
      *         {@link RoleAssignmentStatus#NO_CHANGE} or
      *         {@link RoleAssignmentStatus#REJECTED}
      * @throws IllegalStateException if the group's policy returned a
-     *         decision that breaks the group's constraints; nothing is
-     *         changed in that case
+     *         decision that breaks the group's constraints, or a held role
+     *         carries a conflicting definition of the same group id; nothing
+     *         is changed in either case
      */
     public RoleAssignmentResult assign(K target, Role role) {
         Objects.requireNonNull(target, "target");
@@ -123,6 +124,9 @@ public final class RoleAssignments<K> {
      * @return {@link RoleAssignmentStatus#UNASSIGNED},
      *         {@link RoleAssignmentStatus#NO_CHANGE} (the role was not
      *         held) or {@link RoleAssignmentStatus#REJECTED}
+     * @throws IllegalStateException if {@code role} or a held role carries
+     *         a conflicting definition of the same group id; nothing is
+     *         changed
      */
     public RoleAssignmentResult unassign(K target, Role role) {
         Objects.requireNonNull(target, "target");
@@ -136,6 +140,10 @@ public final class RoleAssignments<K> {
 
             // the stored role is the one whose group the target was counted against
             RoleGroup group = current.get(current.indexOf(role)).group().orElse(null);
+            RoleGroup requestedGroup = role.group().orElse(null);
+            if (group != null && requestedGroup != null && group.equals(requestedGroup)) {
+                requireSameDefinition(group, requestedGroup, role);
+            }
             if (group != null) {
                 int remaining = heldIn(current, group).size() - 1;
                 if (remaining < group.minAssignments()) {
@@ -190,14 +198,31 @@ public final class RoleAssignments<K> {
         return List.copyOf(Objects.requireNonNull(store.roles(target), "store returned null roles"));
     }
 
+    /**
+     * The roles in {@code roles} that belong to {@code group}, failing if
+     * any of them carries a conflicting definition of the same group id —
+     * otherwise the limits applied would depend on which instance the
+     * caller happened to pass in.
+     */
     private static List<Role> heldIn(List<Role> roles, RoleGroup group) {
         List<Role> held = new ArrayList<>();
         for (Role role : roles) {
-            if (role.group().filter(group::equals).isPresent()) {
-                held.add(role);
+            RoleGroup other = role.group().orElse(null);
+            if (other == null || !other.equals(group)) {
+                continue;
             }
+            requireSameDefinition(group, other, role);
+            held.add(role);
         }
         return List.copyOf(held);
+    }
+
+    private static void requireSameDefinition(RoleGroup group, RoleGroup other, Role role) {
+        if (!group.sameDefinition(other)) {
+            throw new IllegalStateException("role group '" + group.id()
+                    + "' has conflicting definitions: role '" + role.id() + "' was built with different "
+                    + "limits or a different policy; build the group once and share it between its roles");
+        }
     }
 
     /**

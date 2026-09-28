@@ -327,6 +327,58 @@ class RoleAssignmentsTest {
         assertEquals(List.of(a, b), assignments.roles("alice"));
     }
 
+    // --- group definitions ------------------------------------------------------
+
+    @Test
+    void conflictingDefinitionsOfOneGroupFailInsteadOfBypassingItsLimits() {
+        RoleGroup strict = group("plan", 0, 1, RoleAssignmentPolicy.REJECT);
+        RoleGroup loose = group("plan", 0, 2, RoleAssignmentPolicy.REJECT);
+        Role pro = role("plan_pro", strict);
+        Role max5 = role("plan_max_5", loose);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", pro);
+
+        assertThrows(IllegalStateException.class, () -> assignments.assign("alice", max5));
+        assertEquals(List.of(pro), assignments.roles("alice"));
+    }
+
+    @Test
+    void conflictingPolicyAloneIsAConflict() {
+        RoleGroup rejecting = group("plan", 0, 1, RoleAssignmentPolicy.REJECT);
+        RoleGroup replacing = group("plan", 0, 1, RoleAssignmentPolicy.REPLACE_EXISTING);
+        Role pro = role("plan_pro", rejecting);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", pro);
+
+        assertThrows(IllegalStateException.class, () -> assignments.assign("alice", role("plan_max_5", replacing)));
+        assertThrows(IllegalStateException.class, () -> assignments.unassign("alice", role("plan_pro", replacing)));
+        assertEquals(List.of(pro), assignments.roles("alice"));
+    }
+
+    @Test
+    void separatelyBuiltButIdenticalDefinitionsAgree() {
+        RoleGroup first = group("plan", 0, 1, RoleAssignmentPolicy.REPLACE_EXISTING);
+        RoleGroup second = group("plan", 0, 1, RoleAssignmentPolicy.REPLACE_EXISTING);
+        Role pro = role("plan_pro", first);
+        Role max5 = role("plan_max_5", second);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", pro);
+
+        assertEquals(RoleAssignmentStatus.REPLACED, assignments.assign("alice", max5).status());
+        assertEquals(List.of(max5), assignments.roles("alice"));
+    }
+
+    @Test
+    void reassigningANewDefinitionOfAHeldRoleKeepsTheOldOne() {
+        Role v1 = role("editor", null, "posts.edit");
+        Role v2 = role("editor", null, "posts.edit", "posts.delete");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", v1);
+
+        assertEquals(RoleAssignmentStatus.NO_CHANGE, assignments.assign("alice", v2).status());
+        assertFalse(assignments.subject("alice").hasPermission("posts.delete"));
+    }
+
     // --- atomicity -----------------------------------------------------------
 
     @Test

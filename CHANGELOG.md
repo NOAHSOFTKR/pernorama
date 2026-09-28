@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and the `RoleAssignmentPolicy` applied when an assignment would go
     over the maximum: built-in `REJECT`, `REPLACE_EXISTING`,
     `REPLACE_OLDEST`, `REPLACE_NEWEST`, or your own returning a
-    `RoleAssignmentDecision`.
+    `RoleAssignmentDecision`. A group id has one definition: roles
+    carrying same-id groups with different limits or policies are
+    rejected with `IllegalStateException` instead of bypassing a limit.
   - `RoleAssignments` — `assign`/`unassign` returning a
     `RoleAssignmentResult` (`ASSIGNED`, `REPLACED`, `UNASSIGNED`,
     `NO_CHANGE`, `REJECTED`, plus the roles removed), with idempotent

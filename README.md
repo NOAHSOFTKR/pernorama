@@ -474,11 +474,20 @@ alice.hasPermission("app.plan.pro");  // false
   an existing `PermissionSubject` via `.permissions(subject)`, e.g. one
   loaded from your database. What it permits is answered with the same
   rules, wildcards and deny semantics as everywhere else; the role layer
-  does no matching of its own. A role is identified by its id.
+  does no matching of its own. A role is identified by its id, and a
+  target keeps the `Role` instance it was assigned: assigning a new
+  definition with the same id is `NO_CHANGE` and does not update it. To
+  change a role's permissions in place, back it with a subject you
+  update, or store role ids and resolve them in your own
+  `RoleAssignmentStore`.
 - **`RoleGroup`** — `minAssignments`/`maxAssignments` for a set of
   related roles (defaults: `0` and unbounded), plus the
   `RoleAssignmentPolicy` that decides what happens when an assignment
-  would go over the maximum.
+  would go over the maximum. A group is identified by its id, so build
+  each group once and share it: if two roles carry same-id groups with
+  different limits or policies, `RoleAssignments` throws
+  `IllegalStateException` rather than let the choice of role decide
+  which limits apply.
 - **`RoleAssignments`** — `assign`, `unassign`, `roles`, and `subject`
   for a target identified by any key type (a user id, say). Storage is
   pluggable through `RoleAssignmentStore`; the default is the in-memory

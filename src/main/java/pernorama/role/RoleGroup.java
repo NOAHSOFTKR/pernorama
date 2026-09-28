@@ -27,8 +27,13 @@ import java.util.Objects;
  * <h2>Identity</h2>
  * A group is identified by its {@link #id()}: two groups with the same
  * id are equal, and roles that point at either count against the same
- * limit. The limits and policy that apply to an assignment are the ones
- * on the group of the role being assigned.
+ * limit. One id must therefore have one definition. Build each group
+ * once and share it between its roles; if two instances with the same id
+ * disagree on {@link #minAssignments()}, {@link #maxAssignments()} or
+ * {@link #assignmentPolicy()} (compared by reference), {@link RoleAssignments}
+ * throws {@link IllegalStateException} and changes nothing as soon as it
+ * sees them in the same group, instead of applying whichever one the
+ * role being assigned happened to carry.
  * <p>
  * Immutable and safe to share across threads.
  */
@@ -79,6 +84,18 @@ public final class RoleGroup {
     /** What happens when an assignment would go over {@link #maxAssignments()}. */
     public RoleAssignmentPolicy assignmentPolicy() {
         return assignmentPolicy;
+    }
+
+    /**
+     * Whether {@code other} is the same group with the same limits and
+     * the same policy instance; {@link #equals(Object)} only compares ids.
+     */
+    boolean sameDefinition(RoleGroup other) {
+        return this == other
+                || (id.equals(other.id)
+                && minAssignments == other.minAssignments
+                && maxAssignments == other.maxAssignments
+                && assignmentPolicy == other.assignmentPolicy);
     }
 
     @Override
