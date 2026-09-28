@@ -42,7 +42,12 @@ public interface RoleAssignmentStore<K> {
     /**
      * Atomically sets {@code target}'s roles to {@code updated} if they
      * currently equal {@code expected}, and reports whether it did. When
-     * this returns {@code false} nothing was changed.
+     * this returns {@code false} nothing was changed. It must return
+     * {@code true} whenever the roles do equal {@code expected}:
+     * {@link RoleAssignments} retries until a write succeeds, so a store
+     * that fails spuriously — on a transient database conflict, say —
+     * should retry that failure itself or throw, not return
+     * {@code false}.
      */
     boolean replace(K target, List<Role> expected, List<Role> updated);
 }

@@ -490,8 +490,9 @@ alice.hasPermission("app.plan.pro");  // false
 - **Going over `maxAssignments`** is handed to the group's policy.
   `REJECT` (the default) leaves the target as it was; `REPLACE_EXISTING`
   replaces every role held in the group — in an exclusive group, the one
-  role; `REPLACE_OLDEST` and `REPLACE_NEWEST` replace as few roles as
-  needed, picked by assignment order.
+  role (so it cannot be combined with a `minAssignments` above 1);
+  `REPLACE_OLDEST` and `REPLACE_NEWEST` replace as few roles as needed,
+  picked by assignment order.
 - **`minAssignments` is enforced on `unassign`**: removing a role that
   would take the target under the minimum is `REJECTED`. A target that
   starts under the minimum, as every target does before its first

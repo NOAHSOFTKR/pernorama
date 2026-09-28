@@ -24,9 +24,9 @@ import java.util.List;
  * {@link IllegalStateException}, and changes nothing, if a decision
  * replaces a role the target does not hold in the group, still leaves the
  * target over the maximum, or takes it under the
- * {@link RoleGroup#minAssignments() minimum} when it was not already
- * there. A policy may be called more than once for one assignment if a
- * concurrent change forces a retry, so it should have no side effects.
+ * {@link RoleGroup#minAssignments() minimum}. A policy may be called
+ * more than once for one assignment if a concurrent change forces a
+ * retry, so it should have no side effects.
  */
 @FunctionalInterface
 public interface RoleAssignmentPolicy {
@@ -41,7 +41,10 @@ public interface RoleAssignmentPolicy {
      * is the only one left. Meant for exclusive groups
      * ({@code maxAssignments(1)}), where it swaps one role for another;
      * in a larger group use {@link #REPLACE_OLDEST} or
-     * {@link #REPLACE_NEWEST} to make room for just one.
+     * {@link #REPLACE_NEWEST} to make room for just one. Because it
+     * leaves a single role, a group with a
+     * {@link RoleGroup#minAssignments() minimum} above {@code 1} cannot
+     * use it; {@link RoleGroup.Builder#build()} rejects that combination.
      */
     RoleAssignmentPolicy REPLACE_EXISTING = (group, held, requested) -> RoleAssignmentDecision.replace(held);
 

@@ -62,7 +62,8 @@ public final class Role {
     /**
      * Starts building a role with the given id.
      *
-     * @throws IllegalArgumentException if {@code id} is blank
+     * @throws IllegalArgumentException if {@code id} is null, blank, or has
+     *         leading or trailing whitespace
      */
     public static Builder builder(String id) {
         return new Builder(RoleIds.requireValid(id, "role id"));

@@ -51,7 +51,8 @@ public final class RoleGroup {
      * has no minimum, no maximum, and the {@link RoleAssignmentPolicy#REJECT}
      * policy.
      *
-     * @throws IllegalArgumentException if {@code id} is blank
+     * @throws IllegalArgumentException if {@code id} is null, blank, or has
+     *         leading or trailing whitespace
      */
     public static Builder builder(String id) {
         return new Builder(RoleIds.requireValid(id, "group id"));
@@ -130,7 +131,9 @@ public final class RoleGroup {
          *
          * @throws IllegalArgumentException if the minimum is negative, the
          *         maximum is less than {@code 1}, or the minimum is greater
-         *         than the maximum
+         *         than the maximum, or the policy is
+         *         {@link RoleAssignmentPolicy#REPLACE_EXISTING} with a
+         *         minimum above {@code 1}, which it could never satisfy
          */
         public RoleGroup build() {
             if (minAssignments < 0) {
@@ -143,6 +146,11 @@ public final class RoleGroup {
                 throw new IllegalArgumentException(
                         "minAssignments (" + minAssignments + ") must not exceed maxAssignments ("
                                 + maxAssignments + ")");
+            }
+            if (assignmentPolicy == RoleAssignmentPolicy.REPLACE_EXISTING && minAssignments > 1) {
+                throw new IllegalArgumentException(
+                        "REPLACE_EXISTING leaves one role, below minAssignments (" + minAssignments
+                                + "); use REPLACE_OLDEST or REPLACE_NEWEST");
             }
             return new RoleGroup(this);
         }

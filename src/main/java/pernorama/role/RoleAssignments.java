@@ -134,7 +134,8 @@ public final class RoleAssignments<K> {
                 return RoleAssignmentResult.noChange(role, false);
             }
 
-            RoleGroup group = role.group().orElse(null);
+            // the stored role is the one whose group the target was counted against
+            RoleGroup group = current.get(current.indexOf(role)).group().orElse(null);
             if (group != null) {
                 int remaining = heldIn(current, group).size() - 1;
                 if (remaining < group.minAssignments()) {
@@ -220,7 +221,7 @@ public final class RoleAssignments<K> {
             throw new IllegalStateException("assignment policy of group '" + group.id()
                     + "' leaves " + after + " role(s), over the maximum of " + group.maxAssignments());
         }
-        if (after < group.minAssignments() && after < held.size()) {
+        if (after < group.minAssignments()) {
             throw new IllegalStateException("assignment policy of group '" + group.id()
                     + "' leaves " + after + " role(s), under the minimum of " + group.minAssignments());
         }

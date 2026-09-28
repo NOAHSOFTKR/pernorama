@@ -41,6 +41,16 @@ class RoleGroupTest {
     }
 
     @Test
+    void replaceExistingCannotMeetAMinimumAboveOne() {
+        assertThrows(IllegalArgumentException.class, () -> RoleGroup.builder("g")
+                .minAssignments(2).maxAssignments(3)
+                .assignmentPolicy(RoleAssignmentPolicy.REPLACE_EXISTING).build());
+
+        RoleGroup.builder("g").minAssignments(1).maxAssignments(1)
+                .assignmentPolicy(RoleAssignmentPolicy.REPLACE_EXISTING).build();
+    }
+
+    @Test
     void nullPolicyAndBlankIdAreRejected() {
         assertThrows(NullPointerException.class, () -> RoleGroup.builder("g").assignmentPolicy(null));
         assertThrows(IllegalArgumentException.class, () -> RoleGroup.builder(""));

@@ -236,6 +236,19 @@ class RoleAssignmentsTest {
     }
 
     @Test
+    void unassignCountsAgainstTheGroupOfTheStoredRole() {
+        RoleGroup plan = group("plan", 1, 1, RoleAssignmentPolicy.REPLACE_EXISTING);
+        Role pro = role("plan_pro", plan);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", pro);
+
+        RoleAssignmentResult result = assignments.unassign("alice", role("plan_pro", null));
+
+        assertEquals(RoleAssignmentStatus.REJECTED, result.status());
+        assertEquals(List.of(pro), assignments.roles("alice"));
+    }
+
+    @Test
     void startingBelowTheMinimumIsAllowed() {
         RoleGroup teams = group("teams", 2, 3, RoleAssignmentPolicy.REJECT);
         Role a = role("team_a", teams);
@@ -302,7 +315,8 @@ class RoleAssignmentsTest {
 
     @Test
     void policyMayNotDropTheGroupUnderItsMinimum() {
-        RoleGroup teams = group("teams", 2, 2, RoleAssignmentPolicy.REPLACE_EXISTING);
+        RoleAssignmentPolicy replaceAll = (g, held, requested) -> RoleAssignmentDecision.replace(held);
+        RoleGroup teams = group("teams", 2, 2, replaceAll);
         Role a = role("team_a", teams);
         Role b = role("team_b", teams);
         RoleAssignments<String> assignments = new RoleAssignments<>();
