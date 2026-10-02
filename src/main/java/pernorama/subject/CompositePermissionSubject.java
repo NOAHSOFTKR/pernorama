@@ -1,6 +1,7 @@
 package pernorama.subject;
 
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 
 import java.util.ArrayList;
@@ -24,16 +25,22 @@ import java.util.Objects;
  * }</pre>
  *
  * <h2>How the answer is combined</h2>
- * {@link #hasPermission(String)} is {@code true} if <b>any</b> source
- * says {@code true}. Each source evaluates its own rules on its own,
- * including any deny rules it holds, so <b>a deny rule only limits the
+ * {@link #hasPermission(String, String)} is {@code true} if <b>any</b>
+ * source says {@code true} for the same node in the same context. Each
+ * source evaluates its own rules on its own, including any deny rules it
+ * holds, so <b>a deny rule only limits the
  * source that holds it</b>: if one role denies {@code users.delete} but
  * another source grants it, the answer is {@code true}. Put a permission
  * in fewer sources rather than expecting a deny in one source to
  * override another. A composite with no sources permits nothing.
+ * <p>
+ * The composite passes the context through unchanged and does not
+ * interpret it: each source applies its own
+ * {@link pernorama.permission.ContextPolicy}, so build every source from
+ * the same {@link pernorama.Pernorama} instance.
  *
  * <h2>Read-only</h2>
- * {@link #grant(String)} and {@link #revoke(String)} throw
+ * {@link #grant(String, String)} and {@link #revoke(String, String)} throw
  * {@link UnsupportedOperationException}: a composite has no storage of
  * its own, and silently picking one of the sources to write to would
  * make "granted to the role" and "granted to the user" indistinguishable
@@ -65,20 +72,23 @@ public final class CompositePermissionSubject implements PermissionSubject {
     }
 
     /**
-     * Returns {@code true} if any source has {@code node}. Sources are
-     * consulted in order and the first {@code true} wins, so a source
-     * that would have thrown is not necessarily reached.
+     * Returns {@code true} if any source has {@code node} in
+     * {@code context}. Sources are consulted in order and the first
+     * {@code true} wins, so a source that would have thrown is not
+     * necessarily reached.
      *
      * @throws InvalidPermissionException if {@code node} is not a
      *         syntactically valid permission node
+     * @throws IllegalArgumentException if {@code context} is empty
      */
     @Override
-    public boolean hasPermission(String node) {
+    public boolean hasPermission(String node, String context) {
         if (!PermissionNode.isValid(node)) {
             throw new InvalidPermissionException(node);
         }
+        PermissionGrant.requireValidContext(context);
         for (PermissionSubject source : sources) {
-            if (source.hasPermission(node)) {
+            if (source.hasPermission(node, context)) {
                 return true;
             }
         }
@@ -91,7 +101,7 @@ public final class CompositePermissionSubject implements PermissionSubject {
      * @throws UnsupportedOperationException always
      */
     @Override
-    public void grant(String node) {
+    public void grant(String node, String context) {
         throw new UnsupportedOperationException(
                 "CompositePermissionSubject is read-only; grant on the source subject instead");
     }
@@ -102,7 +112,7 @@ public final class CompositePermissionSubject implements PermissionSubject {
      * @throws UnsupportedOperationException always
      */
     @Override
-    public void revoke(String node) {
+    public void revoke(String node, String context) {
         throw new UnsupportedOperationException(
                 "CompositePermissionSubject is read-only; revoke on the source subject instead");
     }

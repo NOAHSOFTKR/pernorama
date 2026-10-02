@@ -157,6 +157,24 @@ public final class PermissionResolver {
      *         a valid permission node
      */
     public static boolean matchesAny(Iterable<String> patterns, String required) {
+        return decide(patterns, required) == PERMITTED;
+    }
+
+    /** {@link #decide}: the deciding rule is an allow rule. */
+    static final int PERMITTED = 1;
+    /** {@link #decide}: the deciding rule is a deny rule. */
+    static final int DENIED = 0;
+    /** {@link #decide}: no rule covers the node at all. */
+    static final int NOT_COVERED = -1;
+
+    /**
+     * The three-way answer behind {@link #matchesAny(Iterable, String)}:
+     * {@link #PERMITTED} or {@link #DENIED} by the rule that decides the
+     * node, or {@link #NOT_COVERED} if no rule covers it. Telling the
+     * last two apart is what lets {@link ContextPolicy} fall back from
+     * one set of rules to the next only when the first says nothing.
+     */
+    static int decide(Iterable<String> patterns, String required) {
         validateNode(required);
 
         int best = -1;
@@ -177,7 +195,10 @@ public final class PermissionResolver {
             }
         }
 
-        return permitted;
+        if (best < 0) {
+            return NOT_COVERED;
+        }
+        return permitted ? PERMITTED : DENIED;
     }
 
     private static void validateRule(String pattern) {

@@ -1,6 +1,7 @@
 package pernorama.role;
 
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 import pernorama.permission.PermissionResolver;
 import pernorama.subject.PermissionSubject;
@@ -36,6 +37,17 @@ import java.util.Set;
  * {@link PermissionResolver#matchesAny(Iterable, String)}, or by an
  * existing subject passed to {@link Builder#permissions(PermissionSubject)}
  * — for example one loaded from your database. Not both.
+ *
+ * <h2>Contexts</h2>
+ * A role carries no context of its own: its rules are the same wherever
+ * it is held, and <i>where</i> it is held is a property of the
+ * assignment — {@link RoleAssignments#assign(Object, Role, String)} gives
+ * a target a role in a context, such as a teacher in
+ * {@code academy:123}. {@link RoleAssignments} therefore always asks a
+ * role without a context. For a role built from rules,
+ * {@link #permissions()} gives the same answer in every context; a role
+ * backed by a subject is asked for that subject's grants without a
+ * context.
  *
  * <h2>Identity</h2>
  * A role is identified by its {@link #id()}: two roles with the same id
@@ -219,19 +231,21 @@ public final class Role {
             this.rules = rules;
         }
 
+        /** The same answer in every context: a role's rules carry none. */
         @Override
-        public boolean hasPermission(String node) {
+        public boolean hasPermission(String node, String context) {
+            PermissionGrant.requireValidContext(context);
             return PermissionResolver.matchesAny(rules, node);
         }
 
         @Override
-        public void grant(String node) {
+        public void grant(String node, String context) {
             throw new UnsupportedOperationException(
                     "role '" + roleId + "' is immutable; build a new role instead");
         }
 
         @Override
-        public void revoke(String node) {
+        public void revoke(String node, String context) {
             throw new UnsupportedOperationException(
                     "role '" + roleId + "' is immutable; build a new role instead");
         }

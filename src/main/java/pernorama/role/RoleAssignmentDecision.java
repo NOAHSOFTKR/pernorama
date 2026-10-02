@@ -29,8 +29,8 @@ public final class RoleAssignmentDecision {
 
     /**
      * Accepts the assignment by removing {@code roles}, which must all be
-     * held by the target in the group, in the same atomic change that adds
-     * the new role.
+     * held by the target in the group, in the context being assigned in,
+     * in the same atomic change that adds the new role.
      */
     public static RoleAssignmentDecision replace(Collection<Role> roles) {
         return new RoleAssignmentDecision(null, List.copyOf(Objects.requireNonNull(roles, "roles")));

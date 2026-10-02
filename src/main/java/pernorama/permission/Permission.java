@@ -33,6 +33,16 @@ public final class Permission {
     }
 
     /**
+     * Returns {@code true} if {@code subject} has {@code node} in
+     * {@code context}. Equivalent to
+     * {@code subject.hasPermission(node, context)}.
+     */
+    public static boolean check(PermissionSubject subject, String node, String context) {
+        Objects.requireNonNull(subject, "subject");
+        return subject.hasPermission(node, context);
+    }
+
+    /**
      * Throws {@link PermissionDeniedException} if {@code subject} does not
      * have {@code node}; otherwise returns normally.
      *
@@ -42,6 +52,21 @@ public final class Permission {
         Objects.requireNonNull(subject, "subject");
         if (!subject.hasPermission(node)) {
             throw new PermissionDeniedException(node, subject);
+        }
+    }
+
+    /**
+     * Throws {@link PermissionDeniedException} if {@code subject} does not
+     * have {@code node} in {@code context}; otherwise returns normally.
+     * The exception reports the context as well as the node.
+     *
+     * @throws PermissionDeniedException if {@code subject} lacks
+     *         {@code node} in {@code context}
+     */
+    public static void require(PermissionSubject subject, String node, String context) {
+        Objects.requireNonNull(subject, "subject");
+        if (!subject.hasPermission(node, context)) {
+            throw new PermissionDeniedException(node, context, subject);
         }
     }
 }

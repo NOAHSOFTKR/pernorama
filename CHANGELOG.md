@@ -9,8 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Scoped permissions with contexts** ([#12](https://github.com/NOAHSOFTKR/pernorama/issues/12)).
+  A grant and a check can name a context — an opaque,
+  application-defined string such as `academy:123` — so one subject can
+  hold a permission in one scope and not another:
+  `grant("students.edit", "academy:123")`,
+  `hasPermission("students.edit", "academy:123")`,
+  `revoke("students.edit", "academy:123")`. Pernorama does not generate,
+  parse, validate, or interpret context values; contexts match by string
+  equality only, and `null` is the one spelling of "no context" (an
+  empty string is rejected).
+  - `Pernorama`, the application's configuration root:
+    `Pernorama.builder().contextPolicy(...).build()`, with
+    `newSubject()` and `newRoleAssignments(...)` creating components that
+    use its settings.
+  - `ContextPolicy`, chosen once per `Pernorama` instance:
+    `GLOBAL_FALLBACK` (the default; a grant without a context applies in
+    every context, underneath that context's own grants) or `EXACT`
+    (grants with and without a context are separate). Under
+    `GLOBAL_FALLBACK` the grants in the checked context decide whenever
+    any of their rules covers the node, and the global grants only
+    otherwise. `ContextPolicy.permits(grants, node, context)` is the one
+    implementation of this, for custom subjects too.
+  - `PermissionGrant`, a rule plus a nullable context.
+  - `Permission.check`/`require` overloads taking a context, and
+    `PermissionDeniedException.context()`.
+  - Role assignments in a context: `RoleAssignments.assign`/`unassign`/
+    `roles` take a context, a `RoleAssignment` is a role plus a nullable
+    context, group limits are counted per context, and
+    `RoleAssignmentResult.context()` reports where a change happened.
+
+  A check without a context behaves exactly as before under either
+  policy.
 - **A role layer, `pernorama.role`,** for applications that need rules
-  about which roles a target may hold, on top of the unchanged
+  about which roles a target may hold, on top of the
   `PermissionSubject` core:
   - `Role` — a named bundle of permission rules (or a wrapper around an
     existing `PermissionSubject`), optionally in a group. Its permissions
@@ -26,18 +58,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `RoleAssignmentResult` (`ASSIGNED`, `REPLACED`, `UNASSIGNED`,
     `NO_CHANGE`, `REJECTED`, plus the roles removed), with idempotent
     reassignment and replacement applied as one atomic write.
-  - `RoleAssignmentStore`, a read plus compare-and-set contract for
-    persistence adapters, and the in-memory `MemoryRoleAssignmentStore`.
+  - `RoleAssignmentStore`, a read plus compare-and-set contract over a
+    target's `RoleAssignment`s for persistence adapters, and the
+    in-memory `MemoryRoleAssignmentStore`.
   - `PermissionResolutionPolicy`, separate from the assignment policy,
-    for combining the permissions of several held roles:
-    `ALLOW_OVERRIDES` (the `CompositePermissionSubject` behavior, and the
-    default) and `DENY_OVERRIDES`, or your own.
+    for combining the permissions of the held roles that apply to a
+    check: `ALLOW_OVERRIDES` (the `CompositePermissionSubject` behavior,
+    and the default) and `DENY_OVERRIDES`, or your own.
 
   `CompositePermissionSubject` and every other existing type behave as
   before.
 
 ### Changed
 
+- **Breaking for custom `PermissionSubject` implementations:** the
+  methods to implement are now `hasPermission(String, String)`,
+  `grant(String, String)` and `revoke(String, String)`, whose second
+  argument is the context. The overloads without a context are default
+  methods passing `null`, so callers are unaffected. To upgrade an
+  implementation, add the context parameter to its three methods, and
+  either store it — keeping `PermissionGrant`s and deciding with
+  `pernorama.contextPolicy().permits(grants, node, context)` — or, for a
+  subject that has no contexts, answer `false` to a check with one and
+  reject a grant with one. Ignoring the context would let a contextual
+  check pass on a global grant even under `EXACT`. A subclass of
+  `MemoryPermissionSubject` that overrides the one-argument methods
+  should override the two-argument ones instead: callers that pass a
+  context — `CompositePermissionSubject`, `Permission.check(subject,
+  node, context)`, a role backed by the subject — call those directly.
+- **Breaking: `MemoryPermissionSubject.grantedPermissions()` is replaced
+  by `grants()`,** a read-only live view of `PermissionGrant`s, because a
+  rule string alone no longer says which context it was granted in. The
+  old result is
+  `grants().stream().filter(g -> !g.hasContext()).map(PermissionGrant::rule)`.
 - **`PermissionAnnotationResolver`'s cache no longer keeps classes
   alive.** Resolution results used to live in a static, unbounded
   `ConcurrentHashMap` keyed by `Method`, and a `Method` pins its

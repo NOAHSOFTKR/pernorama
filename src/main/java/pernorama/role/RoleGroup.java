@@ -23,6 +23,12 @@ import java.util.Objects;
  * rejected. A target that starts out under the minimum — every target
  * does, before its first assignment — is not an error; it just cannot
  * lose roles it needs to stay there.
+ * <p>
+ * Both limits are counted per context: only the roles a target holds in
+ * the context being assigned or unassigned in count, so a target can
+ * hold one role of an exclusive group in each of several contexts.
+ * Roles held without a context are counted together, as one more
+ * context. See {@link RoleAssignments#assign(Object, Role, String)}.
  *
  * <h2>Identity</h2>
  * A group is identified by its {@link #id()}: two groups with the same

@@ -126,4 +126,16 @@ class RoleTest {
         assertFalse(role.permissions().hasPermission("users.read"));
         assertFalse(role.denies("users.read"));
     }
+
+    @Test
+    void aRuleBackedRoleAnswersTheSameInEveryContext() {
+        Role teacher = Role.builder("teacher").permission("students.*").permission("-students.delete").build();
+
+        assertTrue(teacher.permissions().hasPermission("students.edit", "academy:123"));
+        assertFalse(teacher.permissions().hasPermission("students.delete", "academy:123"));
+        assertTrue(teacher.permissions().hasPermission("students.edit"));
+        assertThrows(IllegalArgumentException.class, () -> teacher.permissions().hasPermission("students.edit", ""));
+        assertThrows(UnsupportedOperationException.class,
+                () -> teacher.permissions().grant("students.read", "academy:123"));
+    }
 }
