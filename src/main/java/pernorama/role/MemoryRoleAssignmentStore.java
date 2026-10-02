@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * An in-memory {@link RoleAssignmentStore}, the default for
  * {@link RoleAssignments#RoleAssignments()}.
  * <p>
- * Thread-safe. Each target's roles are held as an immutable list in a
+ * Thread-safe. Each target's assignments are held as an immutable list in a
  * {@link ConcurrentHashMap}, and {@link #replace(Object, List, List)}
  * compares and swaps it inside a single
  * {@link ConcurrentHashMap#compute compute}, so a reader always sees
@@ -19,22 +19,22 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class MemoryRoleAssignmentStore<K> implements RoleAssignmentStore<K> {
 
-    private final ConcurrentHashMap<K, List<Role>> assignments = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<K, List<RoleAssignment>> assignments = new ConcurrentHashMap<>();
 
     @Override
-    public List<Role> roles(K target) {
+    public List<RoleAssignment> assignments(K target) {
         Objects.requireNonNull(target, "target");
         return assignments.getOrDefault(target, List.of());
     }
 
     @Override
-    public boolean replace(K target, List<Role> expected, List<Role> updated) {
+    public boolean replace(K target, List<RoleAssignment> expected, List<RoleAssignment> updated) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(expected, "expected");
-        List<Role> copy = List.copyOf(updated);
+        List<RoleAssignment> copy = List.copyOf(updated);
         boolean[] replaced = {false};
         assignments.compute(target, (key, current) -> {
-            List<Role> actual = current == null ? List.of() : current;
+            List<RoleAssignment> actual = current == null ? List.of() : current;
             if (!actual.equals(expected)) {
                 return current;
             }

@@ -99,4 +99,21 @@ class CompositePermissionSubjectTest {
 
         assertThrows(NullPointerException.class, () -> new CompositePermissionSubject(withNullElement));
     }
+
+    @Test
+    void theContextIsPassedToEverySource() {
+        MemoryPermissionSubject own = new MemoryPermissionSubject();
+        MemoryPermissionSubject teachers = new MemoryPermissionSubject();
+        own.grant("profile.edit");
+        teachers.grant("students.edit", "academy:123");
+
+        PermissionSubject user = new CompositePermissionSubject(own, teachers);
+
+        assertTrue(user.hasPermission("students.edit", "academy:123"));
+        assertFalse(user.hasPermission("students.edit", "academy:456"));
+        assertTrue(user.hasPermission("profile.edit", "academy:123")); // GLOBAL_FALLBACK in the source
+        assertThrows(IllegalArgumentException.class, () -> user.hasPermission("profile.edit", ""));
+        assertThrows(UnsupportedOperationException.class, () -> user.grant("profile.edit", "academy:123"));
+        assertThrows(UnsupportedOperationException.class, () -> user.revoke("profile.edit", "academy:123"));
+    }
 }

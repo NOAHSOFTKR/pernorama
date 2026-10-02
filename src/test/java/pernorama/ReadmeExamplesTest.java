@@ -6,7 +6,9 @@ import pernorama.annotation.PermGroup;
 import pernorama.exception.InvalidPermissionException;
 import pernorama.exception.PermissionDeniedException;
 import pernorama.interceptor.PermissionInterceptor;
+import pernorama.permission.ContextPolicy;
 import pernorama.permission.Permission;
+import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 import pernorama.permission.PermissionRegistry;
 import pernorama.permission.PermissionResolver;
@@ -191,34 +193,148 @@ class ReadmeExamplesTest {
                 Set.copyOf(registry.all()));
     }
 
+    @Test
+    void contexts() {
+        Pernorama pernorama = Pernorama.builder()
+                .contextPolicy(ContextPolicy.GLOBAL_FALLBACK)
+                .build();
+
+        MemoryPermissionSubject user = pernorama.newSubject();
+        user.grant("students.read");
+        user.grant("students.edit", "academy:123");
+
+        assertTrue(user.hasPermission("students.read"));
+        assertTrue(user.hasPermission("students.read", "academy:456"));
+        assertTrue(user.hasPermission("students.edit", "academy:123"));
+        assertFalse(user.hasPermission("students.edit", "academy:456"));
+        assertFalse(user.hasPermission("students.edit"));
+
+        user.revoke("students.edit", "academy:123");
+        assertFalse(user.hasPermission("students.edit", "academy:123"));
+        assertTrue(user.hasPermission("students.read", "academy:123"));
+
+        // just strings
+        user.grant("students.delete", "academy:*");
+        assertFalse(user.hasPermission("students.delete", "academy:123"));
+        assertThrows(IllegalArgumentException.class, () -> user.grant("students.read", ""));
+
+        PermissionDeniedException denied = assertThrows(PermissionDeniedException.class,
+                () -> Permission.require(user, "students.edit", "academy:123"));
+        assertEquals(Optional.of("academy:123"), denied.context());
+    }
+
+    @Test
+    void exactContextPolicy() {
+        Pernorama strict = Pernorama.builder()
+                .contextPolicy(ContextPolicy.EXACT)
+                .build();
+
+        MemoryPermissionSubject user = strict.newSubject();
+        user.grant("students.read");
+
+        assertTrue(user.hasPermission("students.read"));
+        assertFalse(user.hasPermission("students.read", "academy:123"));
+
+        user.grant("students.read", "academy:123");
+
+        assertTrue(user.hasPermission("students.read", "academy:123"));
+    }
+
+    @Test
+    void contextsAndDenyRules() {
+        Pernorama pernorama = Pernorama.builder().build();
+
+        MemoryPermissionSubject teacher = pernorama.newSubject();
+        teacher.grant("students.*");
+        teacher.grant("-students.delete", "academy:123");
+
+        assertFalse(teacher.hasPermission("students.delete", "academy:123"));
+        assertTrue(teacher.hasPermission("students.delete", "academy:456"));
+
+        MemoryPermissionSubject manager = pernorama.newSubject();
+        manager.grant("students.delete");
+        manager.grant("-students.*", "academy:123");
+
+        assertFalse(manager.hasPermission("students.delete", "academy:123"));
+        assertTrue(manager.hasPermission("students.delete", "academy:456"));
+    }
+
     /** A minimal, storage-agnostic implementation for illustration. */
     static class DatabaseUser implements PermissionSubject {
 
-        private final Set<String> permissions = new HashSet<>();
+        private final ContextPolicy contextPolicy;
+        private final Set<PermissionGrant> grants = new HashSet<>(); // loaded from your storage
 
-        @Override
-        public boolean hasPermission(String node) {
-            return PermissionResolver.matchesAny(permissions, node);
+        DatabaseUser(Pernorama pernorama) {
+            this.contextPolicy = pernorama.contextPolicy();
         }
 
         @Override
-        public void grant(String node) {
-            permissions.add(node);
+        public boolean hasPermission(String node, String context) {
+            return contextPolicy.permits(grants, node, context);
         }
 
         @Override
-        public void revoke(String node) {
-            permissions.remove(node);
+        public void grant(String node, String context) {
+            grants.add(new PermissionGrant(node, context));
+        }
+
+        @Override
+        public void revoke(String node, String context) {
+            grants.remove(new PermissionGrant(node, context));
+        }
+    }
+
+    /** Rules only, for a subject that never uses contexts. */
+    static class ApiKey implements PermissionSubject {
+
+        private final Set<String> rules = new HashSet<>();
+
+        @Override
+        public boolean hasPermission(String node, String context) {
+            PermissionGrant.requireValidContext(context);
+            return PermissionResolver.matchesAny(rules, node) && context == null;
+        }
+
+        @Override
+        public void grant(String node, String context) {
+            rules.add(ruleWithoutContext(node, context));
+        }
+
+        @Override
+        public void revoke(String node, String context) {
+            rules.remove(ruleWithoutContext(node, context));
+        }
+
+        private static String ruleWithoutContext(String node, String context) {
+            PermissionGrant grant = new PermissionGrant(node, context); // validates both
+            if (grant.hasContext()) {
+                throw new UnsupportedOperationException("API keys have no contexts");
+            }
+            return grant.rule();
         }
     }
 
     @Test
     void customPermissionSubject() {
-        DatabaseUser user = new DatabaseUser();
+        Pernorama pernorama = Pernorama.builder().build();
+
+        DatabaseUser user = new DatabaseUser(pernorama);
         user.grant("users.*");
 
         assertTrue(user.hasPermission("users.create"));
         assertTrue(Permission.check(user, "users.create"));
+
+        ApiKey key = new ApiKey();
+        key.grant("users.read");
+
+        assertTrue(key.hasPermission("users.read"));
+        assertFalse(key.hasPermission("users.read", "academy:123"));
+        assertThrows(UnsupportedOperationException.class, () -> key.grant("users.read", "academy:123"));
+        assertThrows(InvalidPermissionException.class, () -> key.hasPermission("users..read", "academy:123"));
+        assertThrows(InvalidPermissionException.class, () -> key.grant("users..read"));
+        assertThrows(IllegalArgumentException.class, () -> key.hasPermission("users.read", ""));
+        assertThrows(IllegalArgumentException.class, () -> key.grant("users.read", ""));
     }
 
     @Test
@@ -305,5 +421,24 @@ class ReadmeExamplesTest {
         assertTrue(assignments.subject("bob").hasPermission("users.delete"));
         assertFalse(assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES)
                 .hasPermission("users.delete"));
+    }
+
+    @Test
+    void rolesInAContext() {
+        Pernorama pernorama = Pernorama.builder().build();
+
+        Role teacher = Role.builder("teacher").permission("students.*").build();
+        Role student = Role.builder("student").permission("students.read").build();
+
+        RoleAssignments<String> assignments = pernorama.newRoleAssignments();
+        assignments.assign("alice", teacher, "academy:123");
+        assignments.assign("alice", student, "academy:456");
+
+        PermissionSubject alice = assignments.subject("alice");
+        assertTrue(alice.hasPermission("students.edit", "academy:123"));
+        assertFalse(alice.hasPermission("students.edit", "academy:456"));
+        assertTrue(alice.hasPermission("students.read", "academy:456"));
+
+        assertEquals(List.of(teacher), assignments.roles("alice", "academy:123"));
     }
 }
