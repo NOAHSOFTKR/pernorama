@@ -17,7 +17,7 @@ Discord, JWT, a database, or any other integration — you plug those in by
 implementing `PermissionSubject` yourself; see
 [Custom PermissionSubject](#custom-permissionsubject).
 
-> **Status: Beta (`0.2.0-beta.2`)** — see [API Stability](#api-stability).
+> **Status: Beta (`0.3.0`)** — see [API Stability](#api-stability).
 
 ## Installation
 
@@ -30,7 +30,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'io.pernorama:pernorama:0.2.0-beta.2'
+    implementation 'io.pernorama:pernorama:0.3.0'
 }
 ```
 
@@ -45,7 +45,7 @@ dependencies {
 <dependency>
     <groupId>io.pernorama</groupId>
     <artifactId>pernorama</artifactId>
-    <version>0.2.0-beta.2</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
@@ -866,9 +866,9 @@ assignments.roles("alice", "academy:123"); // [teacher]
 
 ## API Stability
 
-Pernorama is in Beta (`0.2.0-beta.x`). The public API described in this
+Pernorama is in Beta (`0.x`). The public API described in this
 README is intended to be the shape 1.0 ships with, but it may still
-change in a following beta release if a real problem is found — such a
+change in a following 0.x release if a real problem is found — such a
 change will be called out in [CHANGELOG.md](CHANGELOG.md) rather than
 made silently. Anything not documented here (package-private members,
 undocumented behavior) may change at any time.

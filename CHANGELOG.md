@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-05
+
 ### Added
 
 - **Scoped permissions with contexts** ([#12](https://github.com/NOAHSOFTKR/pernorama/issues/12)).
@@ -239,7 +241,8 @@ the shape 1.0 ships with; see [API Stability](README.md#api-stability).
   `maven.noahsoft.kr`, with sources and javadoc jars and a tag-triggered publish
   workflow.
 
-[Unreleased]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.2.0-beta.2...HEAD
+[Unreleased]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.2.0-beta.2...v0.3.0
 [0.2.0-beta.2]: https://github.com/NOAHSOFTKR/pernorama/compare/v0.2.0-beta.1...v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/NOAHSOFTKR/pernorama/releases/tag/v0.2.0-beta.1
 [0.1.0]: https://github.com/NOAHSOFTKR/pernorama/commit/ccd6e69734c4b82c74a905d53afbd46422afe97d
