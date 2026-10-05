@@ -54,10 +54,11 @@ public class MemoryPermissionSubject implements PermissionSubject {
     /**
      * Creates a subject using {@link ContextPolicy#GLOBAL_FALLBACK},
      * pre-granted with the given rules, without a context.
+     * {@link pernorama.Pernorama#newSubject(Collection)} uses your
+     * application's policy instead.
      */
     public MemoryPermissionSubject(Collection<String> initialPermissions) {
-        this();
-        initialPermissions.forEach(this::grant);
+        this(ContextPolicy.GLOBAL_FALLBACK, initialPermissions);
     }
 
     /**
@@ -69,9 +70,31 @@ public class MemoryPermissionSubject implements PermissionSubject {
         this.contextPolicy = Objects.requireNonNull(contextPolicy, "contextPolicy");
     }
 
+    /**
+     * Creates a subject that applies {@code contextPolicy}, pre-granted
+     * with the given rules, without a context.
+     * {@link pernorama.Pernorama#newSubject(Collection)} is the usual way
+     * to get one.
+     */
+    public MemoryPermissionSubject(ContextPolicy contextPolicy, Collection<String> initialPermissions) {
+        this(contextPolicy);
+        initialPermissions.forEach(this::grant);
+    }
+
     @Override
     public boolean hasPermission(String node, String context) {
         return contextPolicy.permits(grants, node, context);
+    }
+
+    /**
+     * {@link #hasPermission(String, String)} without a context. Final, so
+     * that a subclass overrides the method every caller reaches — the
+     * one taking a context — rather than one that callers passing a
+     * context would go around.
+     */
+    @Override
+    public final boolean hasPermission(String node) {
+        return hasPermission(node, null);
     }
 
     @Override
@@ -79,9 +102,27 @@ public class MemoryPermissionSubject implements PermissionSubject {
         grants.add(new PermissionGrant(node, context));
     }
 
+    /**
+     * {@link #grant(String, String)} without a context. Final for the
+     * reason given on {@link #hasPermission(String)}.
+     */
+    @Override
+    public final void grant(String node) {
+        grant(node, null);
+    }
+
     @Override
     public void revoke(String node, String context) {
         grants.remove(new PermissionGrant(node, context));
+    }
+
+    /**
+     * {@link #revoke(String, String)} without a context. Final for the
+     * reason given on {@link #hasPermission(String)}.
+     */
+    @Override
+    public final void revoke(String node) {
+        revoke(node, null);
     }
 
     /**

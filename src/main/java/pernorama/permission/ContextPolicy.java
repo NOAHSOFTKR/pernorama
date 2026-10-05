@@ -1,7 +1,5 @@
 package pernorama.permission;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -85,8 +83,7 @@ public enum ContextPolicy {
     public boolean applies(String grantedContext, String requestedContext) {
         PermissionGrant.requireValidContext(grantedContext);
         PermissionGrant.requireValidContext(requestedContext);
-        return Objects.equals(grantedContext, requestedContext)
-                || (fallsBackToGlobal && grantedContext == null);
+        return Objects.equals(grantedContext, requestedContext) || fallsBackTo(grantedContext);
     }
 
     /**
@@ -107,22 +104,34 @@ public enum ContextPolicy {
     public boolean permits(Iterable<PermissionGrant> grants, String node, String context) {
         Objects.requireNonNull(grants, "grants");
         PermissionGrant.requireValidContext(context);
+        PermissionResolver.validateNode(node);
 
-        List<String> scoped = new ArrayList<>();
-        List<String> global = new ArrayList<>();
+        // One pass, ranking the scoped and the global layer side by side.
+        // A PermissionGrant validated its rule when it was created.
+        int scoped = PermissionResolver.NOT_COVERING;
+        int global = PermissionResolver.NOT_COVERING;
         for (PermissionGrant grant : grants) {
             Objects.requireNonNull(grant, "grant");
             if (Objects.equals(grant.context(), context)) {
-                scoped.add(grant.rule());
-            } else if (fallsBackToGlobal && grant.context() == null) {
-                global.add(grant.rule());
+                scoped = Math.max(scoped, PermissionResolver.rank(grant.rule(), node));
+            } else if (fallsBackTo(grant.context())) {
+                global = Math.max(global, PermissionResolver.rank(grant.rule(), node));
             }
         }
 
-        int decision = PermissionResolver.decide(scoped, node);
-        if (decision == PermissionResolver.NOT_COVERED) {
-            decision = PermissionResolver.decide(global, node);
+        PermissionResolver.Decision decision = PermissionResolver.decision(scoped);
+        if (decision == PermissionResolver.Decision.NOT_COVERED) {
+            decision = PermissionResolver.decision(global);
         }
-        return decision == PermissionResolver.PERMITTED;
+        return decision == PermissionResolver.Decision.PERMITTED;
+    }
+
+    /**
+     * Whether something granted in {@code grantedContext} reaches a check
+     * in a different context: only a global grant does, and only under a
+     * policy that falls back to global grants.
+     */
+    private boolean fallsBackTo(String grantedContext) {
+        return fallsBackToGlobal && grantedContext == null;
     }
 }

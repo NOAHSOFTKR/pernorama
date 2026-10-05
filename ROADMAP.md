@@ -97,8 +97,9 @@ code already documents.
   a grant without a context applies inside one is a `ContextPolicy`
   chosen once per `Pernorama` instance: `GLOBAL_FALLBACK`, where the
   checked context's grants decide whenever they cover the node and the
-  global grants only otherwise, or `EXACT`. `PermissionResolver` never
-  sees a context. Context wildcards, hierarchies, compound contexts and
+  global grants only otherwise, or `EXACT`. Role assignments follow
+  the same context-first order under the built-in resolution policies.
+  `PermissionResolver` never sees a context. Context wildcards, hierarchies, compound contexts and
   conditions stay out (see **Non-goals**).
 
 Each is documented in [README.md](README.md) and recorded in
@@ -106,10 +107,13 @@ Each is documented in [README.md](README.md) and recorded in
 
 ### 1. Check-path cost
 
-`MemoryPermissionSubject.hasPermission` builds a `PermissionNode`
-(splitting the string into segments and joining them back) and then
-`PermissionResolver.matchesAny` scans the rules linearly, re-validating
-each one with a regex. Since deny rules landed it can no longer stop at
+`MemoryPermissionSubject.hasPermission` goes through
+`ContextPolicy.permits`, which validates the node by splitting it into
+segments and then ranks every grant in one linear pass. It does not
+re-validate the rules, since a `PermissionGrant` validated its rule
+when it was created, but ranking a deny or wildcard rule still builds
+substrings, and `PermissionResolver.matchesAny` still re-validates each
+rule with a regex. Since deny rules landed it can no longer stop at
 the first match — it has to see every rule to find the most specific
 one — so every check now costs a full pass. That is irrelevant for a
 subject with a handful of rules and measurable for one with hundreds on

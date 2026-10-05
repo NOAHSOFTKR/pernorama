@@ -6,6 +6,7 @@ import pernorama.role.RoleAssignmentStore;
 import pernorama.role.RoleAssignments;
 import pernorama.subject.MemoryPermissionSubject;
 
+import java.util.Collection;
 import java.util.Objects;
 
 /**
@@ -59,6 +60,17 @@ public final class Pernorama {
     /** A new, empty in-memory subject using this instance's settings. */
     public MemoryPermissionSubject newSubject() {
         return new MemoryPermissionSubject(contextPolicy);
+    }
+
+    /**
+     * A new in-memory subject using this instance's settings, pre-granted
+     * with the given rules, without a context.
+     *
+     * @throws pernorama.exception.InvalidPermissionException if any rule
+     *         is not a syntactically valid permission rule
+     */
+    public MemoryPermissionSubject newSubject(Collection<String> initialPermissions) {
+        return new MemoryPermissionSubject(contextPolicy, initialPermissions);
     }
 
     /**

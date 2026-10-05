@@ -7,6 +7,7 @@ import pernorama.permission.PermissionNode;
 import pernorama.subject.PermissionSubject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -220,7 +221,13 @@ public final class RoleAssignments<K> {
         }
     }
 
-    /** {@link #roles(Object, String)} without a context. */
+    /**
+     * {@link #roles(Object, String)} without a context: the roles
+     * {@code target} holds without one, oldest assignment first. Roles
+     * held in a context are not listed, so a target that only holds
+     * roles in contexts gets an empty list; use {@link #assignments(Object)}
+     * for every role in every context.
+     */
     public List<Role> roles(K target) {
         return roles(target, null);
     }
@@ -370,7 +377,7 @@ public final class RoleAssignments<K> {
                     applicable.add(assignment);
                 }
             }
-            return policy.hasPermission(List.copyOf(applicable), node, context);
+            return policy.hasPermission(Collections.unmodifiableList(applicable), node, context);
         }
 
         @Override

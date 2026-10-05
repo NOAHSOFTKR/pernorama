@@ -45,9 +45,10 @@ import java.util.Set;
  * a target a role in a context, such as a teacher in
  * {@code academy:123}. {@link RoleAssignments} therefore always asks a
  * role without a context. For a role built from rules,
- * {@link #permissions()} gives the same answer in every context; a role
- * backed by a subject is asked for that subject's grants without a
- * context.
+ * {@link #permissions()} answers only checks without a context, and is
+ * {@code false} for a check in one, like any subject that has no
+ * contexts; a role backed by a subject is asked for that subject's
+ * grants without a context.
  *
  * <h2>Identity</h2>
  * A role is identified by its {@link #id()}: two roles with the same id
@@ -132,15 +133,28 @@ public final class Role {
             }
             return false;
         }
-        if (PermissionResolver.matchesAny(rules, node)) {
-            return false;
+        return PermissionResolver.decide(rules, node) == PermissionResolver.Decision.DENIED;
+    }
+
+    /**
+     * Whether this role permits {@code node}, explicitly denies it, or
+     * does not cover it, in one evaluation. A role backed by a subject
+     * never reports {@link PermissionResolver.Decision#DENIED}, for the
+     * reason given in {@link #denies(String)}.
+     *
+     * @throws InvalidPermissionException if {@code node} is not a
+     *         syntactically valid permission node
+     */
+    PermissionResolver.Decision decide(String node) {
+        if (rules != null) {
+            return PermissionResolver.decide(rules, node);
         }
-        for (String rule : rules) {
-            if (PermissionResolver.denies(rule, node)) {
-                return true;
-            }
+        if (!PermissionNode.isValid(node)) {
+            throw new InvalidPermissionException(node);
         }
-        return false;
+        return permissions.hasPermission(node)
+                ? PermissionResolver.Decision.PERMITTED
+                : PermissionResolver.Decision.NOT_COVERED;
     }
 
     @Override
@@ -231,11 +245,17 @@ public final class Role {
             this.rules = rules;
         }
 
-        /** The same answer in every context: a role's rules carry none. */
+        /**
+         * A role's rules carry no context, so they answer only a check
+         * without one; a check in a context is {@code false}, under any
+         * {@link pernorama.permission.ContextPolicy}. Hold the role in a
+         * context through {@link RoleAssignments} instead.
+         */
         @Override
         public boolean hasPermission(String node, String context) {
             PermissionGrant.requireValidContext(context);
-            return PermissionResolver.matchesAny(rules, node);
+            boolean permitted = PermissionResolver.matchesAny(rules, node);
+            return context == null && permitted;
         }
 
         @Override

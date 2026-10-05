@@ -21,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty string is rejected).
   - `Pernorama`, the application's configuration root:
     `Pernorama.builder().contextPolicy(...).build()`, with
-    `newSubject()` and `newRoleAssignments(...)` creating components that
-    use its settings.
+    `newSubject()`, `newSubject(rules)` and `newRoleAssignments(...)`
+    creating components that use its settings, and a
+    `MemoryPermissionSubject(ContextPolicy, Collection)` constructor
+    behind `newSubject(rules)`.
   - `ContextPolicy`, chosen once per `Pernorama` instance:
     `GLOBAL_FALLBACK` (the default; a grant without a context applies in
     every context, underneath that context's own grants) or `EXACT`
@@ -32,12 +34,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     otherwise. `ContextPolicy.permits(grants, node, context)` is the one
     implementation of this, for custom subjects too.
   - `PermissionGrant`, a rule plus a nullable context.
+  - `PermissionResolver.decide(rules, node)`, the three-way answer
+    behind `matchesAny` — `PERMITTED`, `DENIED` or `NOT_COVERED` — so
+    "explicitly denied" and "not covered at all" can be told apart.
   - `Permission.check`/`require` overloads taking a context, and
     `PermissionDeniedException.context()`.
   - Role assignments in a context: `RoleAssignments.assign`/`unassign`/
     `roles` take a context, a `RoleAssignment` is a role plus a nullable
     context, group limits are counted per context, and
     `RoleAssignmentResult.context()` reports where a change happened.
+    `roles(target)` lists only the roles held without a context;
+    `assignments(target)` lists every one. Under `GLOBAL_FALLBACK` the
+    built-in resolution policies put roles held in the checked context
+    first, as grants are: if any of them permits or denies the node,
+    they decide, and the roles held without a context only otherwise.
+    A role built from rules carries no context, so its own
+    `permissions()` answers a check in a context with `false`; a role
+    backed by a subject answers as that subject does.
 
   A check without a context behaves exactly as before under either
   policy.
@@ -63,8 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     in-memory `MemoryRoleAssignmentStore`.
   - `PermissionResolutionPolicy`, separate from the assignment policy,
     for combining the permissions of the held roles that apply to a
-    check: `ALLOW_OVERRIDES` (the `CompositePermissionSubject` behavior,
-    and the default) and `DENY_OVERRIDES`, or your own.
+    check: `ALLOW_OVERRIDES` (without contexts, the
+    `CompositePermissionSubject` behavior, and the default) and `DENY_OVERRIDES`, or your own.
 
   `CompositePermissionSubject` and every other existing type behave as
   before.
@@ -81,11 +94,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pernorama.contextPolicy().permits(grants, node, context)` — or, for a
   subject that has no contexts, answer `false` to a check with one and
   reject a grant with one. Ignoring the context would let a contextual
-  check pass on a global grant even under `EXACT`. A subclass of
-  `MemoryPermissionSubject` that overrides the one-argument methods
-  should override the two-argument ones instead: callers that pass a
-  context — `CompositePermissionSubject`, `Permission.check(subject,
-  node, context)`, a role backed by the subject — call those directly.
+  check pass on a global grant even under `EXACT`.
+- **Breaking for subclasses of `MemoryPermissionSubject`:** its
+  `hasPermission(String)`, `grant(String)` and `revoke(String)` are now
+  `final`. Override the two-argument methods instead: callers that pass
+  a context — `CompositePermissionSubject`, `Permission.check(subject,
+  node, context)` — call those directly,
+  so an override of a one-argument method would be silently skipped
+  for them. The compile error makes that visible.
 - **Breaking: `MemoryPermissionSubject.grantedPermissions()` is replaced
   by `grants()`,** a read-only live view of `PermissionGrant`s, because a
   rule string alone no longer says which context it was granted in. The

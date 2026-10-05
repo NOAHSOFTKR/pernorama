@@ -6,6 +6,7 @@ import pernorama.permission.ContextPolicy;
 import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -353,5 +354,43 @@ class MemoryPermissionSubjectTest {
         assertThrows(IllegalArgumentException.class, () -> subject.revoke("users.read", ""));
         assertThrows(IllegalArgumentException.class, () -> subject.hasPermission("users.read", ""));
         assertThrows(InvalidPermissionException.class, () -> subject.grant("users..read", "academy:123"));
+    }
+
+    @Test
+    void thePreGrantingConstructorTakesAPolicy() {
+        MemoryPermissionSubject strict = new MemoryPermissionSubject(ContextPolicy.EXACT, List.of("students.read"));
+        MemoryPermissionSubject loose = new MemoryPermissionSubject(List.of("students.read"));
+
+        assertEquals(ContextPolicy.EXACT, strict.contextPolicy());
+        assertFalse(strict.hasPermission("students.read", "academy:123"));
+        assertEquals(ContextPolicy.GLOBAL_FALLBACK, loose.contextPolicy());
+        assertTrue(loose.hasPermission("students.read", "academy:123"));
+    }
+
+    @Test
+    void theOverloadsWithoutAContextAreFinal() throws Exception {
+        for (String name : List.of("hasPermission", "grant", "revoke")) {
+            assertTrue(Modifier.isFinal(MemoryPermissionSubject.class.getMethod(name, String.class).getModifiers()),
+                    name);
+            assertFalse(Modifier.isFinal(
+                    MemoryPermissionSubject.class.getMethod(name, String.class, String.class).getModifiers()), name);
+        }
+    }
+
+    @Test
+    void aSubclassOverridingTheContextMethodIsReachedWithoutAContextToo() {
+        Set<String> checked = ConcurrentHashMap.newKeySet();
+        MemoryPermissionSubject audited = new MemoryPermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                checked.add(node + "@" + context);
+                return super.hasPermission(node, context);
+            }
+        };
+        audited.grant("users.read");
+
+        assertTrue(audited.hasPermission("users.read"));
+        assertTrue(new CompositePermissionSubject(audited).hasPermission("users.read"));
+        assertEquals(Set.of("users.read@null"), checked);
     }
 }

@@ -441,4 +441,19 @@ class ReadmeExamplesTest {
 
         assertEquals(List.of(teacher), assignments.roles("alice", "academy:123"));
     }
+
+    @Test
+    void rolesHeldInTheContextComeFirst() {
+        Pernorama pernorama = Pernorama.builder().build();
+        Role teacher = Role.builder("teacher").permission("students.*").build();
+        RoleAssignments<String> assignments = pernorama.newRoleAssignments();
+
+        Role restricted = Role.builder("restricted").permission("-students.*").build();
+        assignments.assign("bob", restricted);           // no context
+        assignments.assign("bob", teacher, "academy:123");
+
+        PermissionSubject bob = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
+        assertTrue(bob.hasPermission("students.edit", "academy:123"));
+        assertFalse(bob.hasPermission("students.edit", "academy:456"));
+    }
 }

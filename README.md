@@ -316,9 +316,11 @@ user.hasPermission("students.read", "academy:123"); // true
 
 Under both policies a check *without* a context sees only grants
 without one. Create subjects and role assignments through your
-`Pernorama` instance so they all share its policy; the constructors that
-take no policy (`new MemoryPermissionSubject()`, `new RoleAssignments<>()`)
-use `GLOBAL_FALLBACK`. An application that needs different semantics for
+`Pernorama` instance so they all share its policy —
+`pernorama.newSubject(List.of(...))` pre-grants rules the same way; the
+constructors that take no policy (`new MemoryPermissionSubject()`,
+`new MemoryPermissionSubject(rules)`, `new RoleAssignments<>()`) use
+`GLOBAL_FALLBACK`. An application that needs different semantics for
 different domains uses one instance per domain.
 
 ### Contexts and deny rules
@@ -561,7 +563,11 @@ class ApiKey implements PermissionSubject {
 ```
 
 `MemoryPermissionSubject` remains the built-in, ready-to-use in-memory
-implementation, with the same `grant`/`revoke`/`hasPermission` API.
+implementation, with the same `grant`/`revoke`/`hasPermission` API. To
+extend it — to audit checks, say — override the methods that take a
+context: its overloads without one are `final`, because callers that
+pass a context, such as `CompositePermissionSubject`, call the
+two-argument methods directly.
 
 Nothing in `PermissionSubject` or the rest of the core API depends on
 Spring Security, Discord, JWT, OAuth2, a SQL database, or Redis — those
@@ -716,11 +722,17 @@ questions. The second is a `PermissionResolutionPolicy`, passed to
 
 - **`ALLOW_OVERRIDES`** (the default for `subject(target)`) — permitted
   if any role permits the node; a deny rule only limits the role holding
-  it. This is exactly `CompositePermissionSubject`'s behavior.
+  it. Without contexts this is exactly `CompositePermissionSubject`'s
+  behavior.
 - **`DENY_OVERRIDES`** — permitted if some role permits the node and no
   role *explicitly denies* it, so a deny rule in one role vetoes a grant
   in another. A role that simply does not mention the node vetoes
   nothing, and only a role built from rules can deny.
+
+Both combine the roles of one layer. In a check with a context, roles
+held in that context come before roles held without one, so a global
+deny does not veto a role held in the context that covers the node —
+see [Roles in a context](#roles-in-a-context).
 
 ```java
 Role editor = Role.builder("editor").permission("users.*").build();
@@ -776,7 +788,8 @@ assignments.roles("alice", "academy:123"); // [teacher]
   a grant: under `GLOBAL_FALLBACK` a role assigned without a context
   applies in every context, under `EXACT` only to checks without one;
   a role assigned in a context applies only there. `roles(target,
-  context)` lists what is held in exactly that context, and
+  context)` lists what is held in exactly that context — so
+  `roles(target)` lists only the roles held without one — and
   `assignments(target)` every `RoleAssignment` in every context.
 - **Group limits are counted per context.** Being a teacher in
   `academy:123` does not stop an exclusive `membership` group from
@@ -786,13 +799,32 @@ assignments.roles("alice", "academy:123"); // [teacher]
   is only shown the roles held there. A group id still has one
   definition everywhere: a conflicting definition held in any context
   fails the call.
-- **The resolution policy combines the roles that apply.**
-  `ALLOW_OVERRIDES` and `DENY_OVERRIDES` work as above over the roles
-  whose assignment applies to the checked context, so under
-  `DENY_OVERRIDES` a deny in a role held in `academy:123` vetoes a grant
-  from a role held without a context — in `academy:123` only. A custom
-  policy receives the applicable `RoleAssignment`s and the context, so
-  it can rank a role held in the context above a global one.
+- **Roles held in the context come first, as grants do.** Under
+  `GLOBAL_FALLBACK` the built-in policies see two layers, exactly like
+  [grants in a context](#contexts-and-deny-rules): if any role held in
+  the checked context permits or denies the node, those roles decide,
+  combined as above, and the roles held without a context decide only
+  otherwise. So a role held in `academy:123` can narrow or re-allow what
+  a global role says — in `academy:123` only — under either policy:
+
+  ```java
+  Role restricted = Role.builder("restricted").permission("-students.*").build();
+  assignments.assign("bob", restricted);           // no context
+  assignments.assign("bob", teacher, "academy:123");
+
+  PermissionSubject bob = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
+  bob.hasPermission("students.edit", "academy:123"); // true, the teacher role decides there
+  bob.hasPermission("students.edit", "academy:456"); // false, only the global role applies
+  ```
+
+  A custom policy receives every applicable `RoleAssignment`, from both
+  layers, and the context, and decides for itself how they relate.
+- **A role's own `permissions()` has no contexts.** Asked directly, a
+  role built from rules answers only checks without a context and is
+  `false` for a check in one, under either policy — like any subject
+  without contexts (see [Custom PermissionSubject](#custom-permissionsubject)).
+  Hold a role in a context through `RoleAssignments` instead of
+  composing `role.permissions()` into a `CompositePermissionSubject`.
 - **Results and stores carry the context.** `RoleAssignmentResult.context()`
   says where a change happened, and `RoleAssignmentStore` reads and
   compare-and-sets a list of `RoleAssignment`s — one row per target,
@@ -806,9 +838,9 @@ assignments.roles("alice", "academy:123"); // [teacher]
   `ConcurrentHashMap` key set, so reads never block on writes. Each
   call is atomic on its own, but a *multi-rule* update is not: between
   `grant("users.*")` and `grant("-users.delete")` another thread can
-  still see `users.delete` permitted. Pass the whole rule set to the
-  constructor before the subject is shared, or synchronize the update
-  yourself.
+  still see `users.delete` permitted. Pass the whole rule set to
+  `pernorama.newSubject(rules)` or the constructor before the subject
+  is shared, or synchronize the update yourself.
 - **`CompositePermissionSubject`** — immutable in itself; its source
   list is copied when it is constructed. Whether concurrent use is safe
   therefore depends entirely on the subjects it was given.

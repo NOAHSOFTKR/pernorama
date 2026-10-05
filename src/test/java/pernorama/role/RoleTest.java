@@ -2,6 +2,8 @@ package pernorama.role;
 
 import org.junit.jupiter.api.Test;
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.ContextPolicy;
+import pernorama.subject.CompositePermissionSubject;
 import pernorama.subject.MemoryPermissionSubject;
 import pernorama.subject.PermissionSubject;
 
@@ -128,13 +130,27 @@ class RoleTest {
     }
 
     @Test
-    void aRuleBackedRoleAnswersTheSameInEveryContext() {
+    void aRuleBackedRoleDoesNotLeakIntoAContextThroughAComposite() {
+        Role teacher = Role.builder("teacher").permission("students.*").build();
+        MemoryPermissionSubject own = new MemoryPermissionSubject(ContextPolicy.EXACT);
+        PermissionSubject user = new CompositePermissionSubject(own, teacher.permissions());
+
+        assertTrue(user.hasPermission("students.edit"));
+        assertFalse(user.hasPermission("students.edit", "academy:456"));
+    }
+
+    @Test
+    void aRuleBackedRoleAnswersOnlyChecksWithoutAContext() {
         Role teacher = Role.builder("teacher").permission("students.*").permission("-students.delete").build();
 
-        assertTrue(teacher.permissions().hasPermission("students.edit", "academy:123"));
-        assertFalse(teacher.permissions().hasPermission("students.delete", "academy:123"));
         assertTrue(teacher.permissions().hasPermission("students.edit"));
+        assertFalse(teacher.permissions().hasPermission("students.delete"));
+        // its rules carry no context, so they do not reach into one under any policy
+        assertFalse(teacher.permissions().hasPermission("students.edit", "academy:123"));
+        assertFalse(teacher.permissions().hasPermission("students.delete", "academy:123"));
         assertThrows(IllegalArgumentException.class, () -> teacher.permissions().hasPermission("students.edit", ""));
+        assertThrows(InvalidPermissionException.class,
+                () -> teacher.permissions().hasPermission("students..edit", "academy:123"));
         assertThrows(UnsupportedOperationException.class,
                 () -> teacher.permissions().grant("students.read", "academy:123"));
     }
