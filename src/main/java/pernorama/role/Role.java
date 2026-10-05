@@ -1,6 +1,7 @@
 package pernorama.role;
 
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 import pernorama.permission.PermissionResolver;
 import pernorama.subject.PermissionSubject;
@@ -36,6 +37,18 @@ import java.util.Set;
  * {@link PermissionResolver#matchesAny(Iterable, String)}, or by an
  * existing subject passed to {@link Builder#permissions(PermissionSubject)}
  * — for example one loaded from your database. Not both.
+ *
+ * <h2>Contexts</h2>
+ * A role carries no context of its own: its rules are the same wherever
+ * it is held, and <i>where</i> it is held is a property of the
+ * assignment — {@link RoleAssignments#assign(Object, Role, String)} gives
+ * a target a role in a context, such as a teacher in
+ * {@code academy:123}. {@link RoleAssignments} therefore always asks a
+ * role without a context. For a role built from rules,
+ * {@link #permissions()} answers only checks without a context, and is
+ * {@code false} for a check in one, like any subject that has no
+ * contexts; a role backed by a subject is asked for that subject's
+ * grants without a context.
  *
  * <h2>Identity</h2>
  * A role is identified by its {@link #id()}: two roles with the same id
@@ -120,15 +133,28 @@ public final class Role {
             }
             return false;
         }
-        if (PermissionResolver.matchesAny(rules, node)) {
-            return false;
+        return PermissionResolver.decide(rules, node) == PermissionResolver.Decision.DENIED;
+    }
+
+    /**
+     * Whether this role permits {@code node}, explicitly denies it, or
+     * does not cover it, in one evaluation. A role backed by a subject
+     * never reports {@link PermissionResolver.Decision#DENIED}, for the
+     * reason given in {@link #denies(String)}.
+     *
+     * @throws InvalidPermissionException if {@code node} is not a
+     *         syntactically valid permission node
+     */
+    PermissionResolver.Decision decide(String node) {
+        if (rules != null) {
+            return PermissionResolver.decide(rules, node);
         }
-        for (String rule : rules) {
-            if (PermissionResolver.denies(rule, node)) {
-                return true;
-            }
+        if (!PermissionNode.isValid(node)) {
+            throw new InvalidPermissionException(node);
         }
-        return false;
+        return permissions.hasPermission(node)
+                ? PermissionResolver.Decision.PERMITTED
+                : PermissionResolver.Decision.NOT_COVERED;
     }
 
     @Override
@@ -219,19 +245,27 @@ public final class Role {
             this.rules = rules;
         }
 
+        /**
+         * A role's rules carry no context, so they answer only a check
+         * without one; a check in a context is {@code false}, under any
+         * {@link pernorama.permission.ContextPolicy}. Hold the role in a
+         * context through {@link RoleAssignments} instead.
+         */
         @Override
-        public boolean hasPermission(String node) {
-            return PermissionResolver.matchesAny(rules, node);
+        public boolean hasPermission(String node, String context) {
+            PermissionGrant.requireValidContext(context);
+            boolean permitted = PermissionResolver.matchesAny(rules, node);
+            return context == null && permitted;
         }
 
         @Override
-        public void grant(String node) {
+        public void grant(String node, String context) {
             throw new UnsupportedOperationException(
                     "role '" + roleId + "' is immutable; build a new role instead");
         }
 
         @Override
-        public void revoke(String node) {
+        public void revoke(String node, String context) {
             throw new UnsupportedOperationException(
                     "role '" + roleId + "' is immutable; build a new role instead");
         }

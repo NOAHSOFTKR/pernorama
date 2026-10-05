@@ -27,7 +27,9 @@ below; everything after it is still open work.
   `PermissionDeniedException`.
 
 On top of the core, `pernorama.role` provides roles, role groups and
-role assignments (unreleased; see **Settled** below).
+role assignments, and grants, checks and assignments can be scoped to
+a context through a `Pernorama` instance's `ContextPolicy` (both
+unreleased; see **Settled** below).
 
 [README.md](README.md) documents all of this except the
 `PernoramaException` base type, which is described only in its own
@@ -89,16 +91,29 @@ code already documents.
   `PermissionSubject` never touches it. It lives in the same artifact
   for now; whether it becomes a separate `pernorama-rbac` artifact is
   decided with the module split below.
+- **Contexts.** A grant, a check and a role assignment can name a
+  context, an opaque application-defined string matched by equality
+  only — permission nodes plus scoped grants, not a policy engine. Whether
+  a grant without a context applies inside one is a `ContextPolicy`
+  chosen once per `Pernorama` instance: `GLOBAL_FALLBACK`, where the
+  checked context's grants decide whenever they cover the node and the
+  global grants only otherwise, or `EXACT`. Role assignments follow
+  the same context-first order under the built-in resolution policies.
+  `PermissionResolver` never sees a context. Context wildcards, hierarchies, compound contexts and
+  conditions stay out (see **Non-goals**).
 
 Each is documented in [README.md](README.md) and recorded in
 [CHANGELOG.md](CHANGELOG.md). What is left:
 
 ### 1. Check-path cost
 
-`MemoryPermissionSubject.hasPermission` builds a `PermissionNode`
-(splitting the string into segments and joining them back) and then
-`PermissionResolver.matchesAny` scans the rules linearly, re-validating
-each one with a regex. Since deny rules landed it can no longer stop at
+`MemoryPermissionSubject.hasPermission` goes through
+`ContextPolicy.permits`, which validates the node by splitting it into
+segments and then ranks every grant in one linear pass. It does not
+re-validate the rules, since a `PermissionGrant` validated its rule
+when it was created, but ranking a deny or wildcard rule still builds
+substrings, and `PermissionResolver.matchesAny` still re-validates each
+rule with a regex. Since deny rules landed it can no longer stop at
 the first match — it has to see every rule to find the most specific
 one — so every check now costs a full pass. That is irrelevant for a
 subject with a handful of rules and measurable for one with hundreds on
@@ -147,6 +162,16 @@ The README should also state what the class javadoc already does:
 `register` looks at methods declared directly on the scanned class,
 so an inherited annotated method is not registered by scanning the
 subclass.
+
+### 4. Contexts outside `PermissionSubject`
+
+`@Perm` and `PermissionInterceptor` still check without a context, since
+an annotation cannot know which tenant a call is for. A context-taking
+`invoke`/`isPermitted` overload, or a way to derive the context from the
+call, is best decided together with the Spring module that would use it.
+Likewise, a role carries no context of its own — the assignment does —
+and roles whose rules each name a context could be added later without
+breaking anything if a real use case needs both.
 
 ## 1.0.0
 
@@ -198,7 +223,9 @@ done, so nothing above blocks them.
 - **Wildcards anywhere but the last segment.** `users.*.read` stays
   invalid; the trailing-only rule is what keeps matching predictable.
 - **A general policy engine.** Conditions, attributes and rule
-  ordering (ABAC) are a different library.
+  ordering (ABAC) are a different library. That includes anything
+  beyond an opaque context string: key-value context sets, context
+  wildcards or hierarchies, and validating that a context exists.
 - **Dependencies in the core**, including for scanning, logging or
   JSON.
 

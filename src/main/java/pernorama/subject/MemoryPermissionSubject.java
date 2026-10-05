@@ -1,28 +1,36 @@
 package pernorama.subject;
 
-import pernorama.exception.InvalidPermissionException;
-import pernorama.permission.PermissionNode;
-import pernorama.permission.PermissionResolver;
+import pernorama.permission.ContextPolicy;
+import pernorama.permission.PermissionGrant;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * An in-memory {@link PermissionSubject} backed by a set of granted
- * permission rules, which may include deny rules such as
- * {@code "-users.delete"}; {@link pernorama.permission.PermissionResolver}
- * decides which rule wins when several cover the same node.
+ * An in-memory {@link PermissionSubject} backed by a set of
+ * {@linkplain PermissionGrant grants}: permission rules, which may
+ * include deny rules such as {@code "-users.delete"}, each optionally
+ * scoped to a context. {@link pernorama.permission.PermissionResolver}
+ * decides which rule wins when several cover the same node, and the
+ * subject's {@link ContextPolicy} decides which grants apply in a
+ * context.
  * <p>
- * Thread-safe: {@link #grant(String)}, {@link #revoke(String)} and
- * {@link #hasPermission(String)} may all be called concurrently from
- * multiple threads without external synchronization. The backing store is
- * a {@link ConcurrentHashMap} key set, so reads never block on writes.
- * As with any concurrent collection, a {@link #hasPermission(String)}
- * call racing a {@link #grant(String)}/{@link #revoke(String)} call on
- * another thread may observe either the state before or after that call;
- * it never throws or corrupts state.
+ * Create one with {@link pernorama.Pernorama#newSubject()} so it uses
+ * the policy your application chose. The constructors that take no
+ * policy use {@link ContextPolicy#GLOBAL_FALLBACK}, the default of
+ * {@link pernorama.Pernorama#builder()}.
+ * <p>
+ * Thread-safe: {@link #grant(String, String)}, {@link #revoke(String, String)}
+ * and {@link #hasPermission(String, String)} may all be called
+ * concurrently from multiple threads without external synchronization.
+ * The backing store is a {@link ConcurrentHashMap} key set, so reads
+ * never block on writes. As with any concurrent collection, a
+ * {@code hasPermission} call racing a {@code grant}/{@code revoke} call
+ * on another thread may observe either the state before or after that
+ * call; it never throws or corrupts state.
  * <p>
  * Each call is atomic on its own, but a rule set built from several
  * calls is not: between {@code grant("users.*")} and
@@ -35,44 +43,98 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MemoryPermissionSubject implements PermissionSubject {
 
-    private final Set<String> grantedPermissions = ConcurrentHashMap.newKeySet();
+    private final ContextPolicy contextPolicy;
+    private final Set<PermissionGrant> grants = ConcurrentHashMap.newKeySet();
 
+    /** Creates an empty subject using {@link ContextPolicy#GLOBAL_FALLBACK}. */
     public MemoryPermissionSubject() {
+        this(ContextPolicy.GLOBAL_FALLBACK);
     }
 
-    /** Creates a subject pre-granted with the given permission strings. */
+    /**
+     * Creates a subject using {@link ContextPolicy#GLOBAL_FALLBACK},
+     * pre-granted with the given rules, without a context.
+     * {@link pernorama.Pernorama#newSubject(Collection)} uses your
+     * application's policy instead.
+     */
     public MemoryPermissionSubject(Collection<String> initialPermissions) {
+        this(ContextPolicy.GLOBAL_FALLBACK, initialPermissions);
+    }
+
+    /**
+     * Creates an empty subject that applies {@code contextPolicy}.
+     * {@link pernorama.Pernorama#newSubject()} is the usual way to get
+     * one.
+     */
+    public MemoryPermissionSubject(ContextPolicy contextPolicy) {
+        this.contextPolicy = Objects.requireNonNull(contextPolicy, "contextPolicy");
+    }
+
+    /**
+     * Creates a subject that applies {@code contextPolicy}, pre-granted
+     * with the given rules, without a context.
+     * {@link pernorama.Pernorama#newSubject(Collection)} is the usual way
+     * to get one.
+     */
+    public MemoryPermissionSubject(ContextPolicy contextPolicy, Collection<String> initialPermissions) {
+        this(contextPolicy);
         initialPermissions.forEach(this::grant);
     }
 
     @Override
-    public boolean hasPermission(String node) {
-        PermissionNode required = PermissionNode.of(node);
-        return PermissionResolver.matchesAny(grantedPermissions, required.name());
-    }
-
-    @Override
-    public void grant(String node) {
-        grantedPermissions.add(normalize(node));
-    }
-
-    @Override
-    public void revoke(String node) {
-        grantedPermissions.remove(normalize(node));
+    public boolean hasPermission(String node, String context) {
+        return contextPolicy.permits(grants, node, context);
     }
 
     /**
-     * The raw set of granted rules, deny rules included. Iteration order
-     * is not defined.
+     * {@link #hasPermission(String, String)} without a context. Final, so
+     * that a subclass overrides the method every caller reaches — the
+     * one taking a context — rather than one that callers passing a
+     * context would go around.
      */
-    public Set<String> grantedPermissions() {
-        return Collections.unmodifiableSet(grantedPermissions);
+    @Override
+    public final boolean hasPermission(String node) {
+        return hasPermission(node, null);
     }
 
-    private String normalize(String node) {
-        if (!PermissionResolver.isValidPattern(node)) {
-            throw new InvalidPermissionException(node);
-        }
-        return node;
+    @Override
+    public void grant(String node, String context) {
+        grants.add(new PermissionGrant(node, context));
+    }
+
+    /**
+     * {@link #grant(String, String)} without a context. Final for the
+     * reason given on {@link #hasPermission(String)}.
+     */
+    @Override
+    public final void grant(String node) {
+        grant(node, null);
+    }
+
+    @Override
+    public void revoke(String node, String context) {
+        grants.remove(new PermissionGrant(node, context));
+    }
+
+    /**
+     * {@link #revoke(String, String)} without a context. Final for the
+     * reason given on {@link #hasPermission(String)}.
+     */
+    @Override
+    public final void revoke(String node) {
+        revoke(node, null);
+    }
+
+    /**
+     * Every grant this subject holds, deny rules and every context
+     * included, as a read-only live view. Iteration order is not defined.
+     */
+    public Set<PermissionGrant> grants() {
+        return Collections.unmodifiableSet(grants);
+    }
+
+    /** The policy deciding which grants apply in a context. */
+    public ContextPolicy contextPolicy() {
+        return contextPolicy;
     }
 }

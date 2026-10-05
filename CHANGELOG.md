@@ -9,8 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Scoped permissions with contexts** ([#12](https://github.com/NOAHSOFTKR/pernorama/issues/12)).
+  A grant and a check can name a context — an opaque,
+  application-defined string such as `academy:123` — so one subject can
+  hold a permission in one scope and not another:
+  `grant("students.edit", "academy:123")`,
+  `hasPermission("students.edit", "academy:123")`,
+  `revoke("students.edit", "academy:123")`. Pernorama does not generate,
+  parse, validate, or interpret context values; contexts match by string
+  equality only, and `null` is the one spelling of "no context" (an
+  empty string is rejected).
+  - `Pernorama`, the application's configuration root:
+    `Pernorama.builder().contextPolicy(...).build()`, with
+    `newSubject()`, `newSubject(rules)` and `newRoleAssignments(...)`
+    creating components that use its settings, and a
+    `MemoryPermissionSubject(ContextPolicy, Collection)` constructor
+    behind `newSubject(rules)`.
+  - `ContextPolicy`, chosen once per `Pernorama` instance:
+    `GLOBAL_FALLBACK` (the default; a grant without a context applies in
+    every context, underneath that context's own grants) or `EXACT`
+    (grants with and without a context are separate). Under
+    `GLOBAL_FALLBACK` the grants in the checked context decide whenever
+    any of their rules covers the node, and the global grants only
+    otherwise. `ContextPolicy.permits(grants, node, context)` is the one
+    implementation of this, for custom subjects too.
+  - `PermissionGrant`, a rule plus a nullable context.
+  - `PermissionResolver.decide(rules, node)`, the three-way answer
+    behind `matchesAny` — `PERMITTED`, `DENIED` or `NOT_COVERED` — so
+    "explicitly denied" and "not covered at all" can be told apart.
+  - `Permission.check`/`require` overloads taking a context, and
+    `PermissionDeniedException.context()`.
+  - Role assignments in a context: `RoleAssignments.assign`/`unassign`/
+    `roles` take a context, a `RoleAssignment` is a role plus a nullable
+    context, group limits are counted per context, and
+    `RoleAssignmentResult.context()` reports where a change happened.
+    `roles(target)` lists only the roles held without a context;
+    `assignments(target)` lists every one. Under `GLOBAL_FALLBACK` the
+    built-in resolution policies put roles held in the checked context
+    first, as grants are: if any of them permits or denies the node,
+    they decide, and the roles held without a context only otherwise.
+    A role built from rules carries no context, so its own
+    `permissions()` answers a check in a context with `false`; a role
+    backed by a subject answers as that subject does.
+
+  A check without a context behaves exactly as before under either
+  policy.
 - **A role layer, `pernorama.role`,** for applications that need rules
-  about which roles a target may hold, on top of the unchanged
+  about which roles a target may hold, on top of the
   `PermissionSubject` core:
   - `Role` — a named bundle of permission rules (or a wrapper around an
     existing `PermissionSubject`), optionally in a group. Its permissions
@@ -26,18 +71,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `RoleAssignmentResult` (`ASSIGNED`, `REPLACED`, `UNASSIGNED`,
     `NO_CHANGE`, `REJECTED`, plus the roles removed), with idempotent
     reassignment and replacement applied as one atomic write.
-  - `RoleAssignmentStore`, a read plus compare-and-set contract for
-    persistence adapters, and the in-memory `MemoryRoleAssignmentStore`.
+  - `RoleAssignmentStore`, a read plus compare-and-set contract over a
+    target's `RoleAssignment`s for persistence adapters, and the
+    in-memory `MemoryRoleAssignmentStore`.
   - `PermissionResolutionPolicy`, separate from the assignment policy,
-    for combining the permissions of several held roles:
-    `ALLOW_OVERRIDES` (the `CompositePermissionSubject` behavior, and the
-    default) and `DENY_OVERRIDES`, or your own.
+    for combining the permissions of the held roles that apply to a
+    check: `ALLOW_OVERRIDES` (without contexts, the
+    `CompositePermissionSubject` behavior, and the default) and `DENY_OVERRIDES`, or your own.
 
   `CompositePermissionSubject` and every other existing type behave as
   before.
 
 ### Changed
 
+- **Breaking for custom `PermissionSubject` implementations:** the
+  methods to implement are now `hasPermission(String, String)`,
+  `grant(String, String)` and `revoke(String, String)`, whose second
+  argument is the context. The overloads without a context are default
+  methods passing `null`, so callers are unaffected. To upgrade an
+  implementation, add the context parameter to its three methods, and
+  either store it — keeping `PermissionGrant`s and deciding with
+  `pernorama.contextPolicy().permits(grants, node, context)` — or, for a
+  subject that has no contexts, answer `false` to a check with one and
+  reject a grant with one. Ignoring the context would let a contextual
+  check pass on a global grant even under `EXACT`.
+- **Breaking for subclasses of `MemoryPermissionSubject`:** its
+  `hasPermission(String)`, `grant(String)` and `revoke(String)` are now
+  `final`. Override the two-argument methods instead: callers that pass
+  a context — `CompositePermissionSubject`, `Permission.check(subject,
+  node, context)` — call those directly,
+  so an override of a one-argument method would be silently skipped
+  for them. The compile error makes that visible.
+- **Breaking: `MemoryPermissionSubject.grantedPermissions()` is replaced
+  by `grants()`,** a read-only live view of `PermissionGrant`s, because a
+  rule string alone no longer says which context it was granted in. The
+  old result is
+  `grants().stream().filter(g -> !g.hasContext()).map(PermissionGrant::rule)`.
 - **`PermissionAnnotationResolver`'s cache no longer keeps classes
   alive.** Resolution results used to live in a static, unbounded
   `ConcurrentHashMap` keyed by `Method`, and a `Method` pins its

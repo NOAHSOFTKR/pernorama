@@ -2,11 +2,13 @@ package pernorama.role;
 
 import org.junit.jupiter.api.Test;
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.ContextPolicy;
 import pernorama.subject.CompositePermissionSubject;
 import pernorama.subject.MemoryPermissionSubject;
 import pernorama.subject.PermissionSubject;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -383,16 +385,16 @@ class RoleAssignmentsTest {
 
     @Test
     void replacementIsOneStoreWrite() {
-        List<List<Role>> writes = new ArrayList<>();
+        List<List<RoleAssignment>> writes = new ArrayList<>();
         MemoryRoleAssignmentStore<String> memory = new MemoryRoleAssignmentStore<>();
         RoleAssignmentStore<String> recording = new RoleAssignmentStore<>() {
             @Override
-            public List<Role> roles(String target) {
-                return memory.roles(target);
+            public List<RoleAssignment> assignments(String target) {
+                return memory.assignments(target);
             }
 
             @Override
-            public boolean replace(String target, List<Role> expected, List<Role> updated) {
+            public boolean replace(String target, List<RoleAssignment> expected, List<RoleAssignment> updated) {
                 writes.add(updated);
                 return memory.replace(target, expected, updated);
             }
@@ -406,7 +408,7 @@ class RoleAssignmentsTest {
 
         assignments.assign("alice", max5);
 
-        assertEquals(List.of(List.of(max5)), writes);
+        assertEquals(List.of(List.of(new RoleAssignment(max5, null))), writes);
     }
 
     @Test
@@ -416,19 +418,19 @@ class RoleAssignmentsTest {
         Role max5 = role("plan_max_5", plan);
         Role max20 = role("plan_max_20", plan);
         MemoryRoleAssignmentStore<String> memory = new MemoryRoleAssignmentStore<>();
-        memory.replace("alice", List.of(), List.of(pro));
+        memory.replace("alice", List.of(), List.of(new RoleAssignment(pro, null)));
         AtomicInteger calls = new AtomicInteger();
         RoleAssignmentStore<String> racing = new RoleAssignmentStore<>() {
             @Override
-            public List<Role> roles(String target) {
-                return memory.roles(target);
+            public List<RoleAssignment> assignments(String target) {
+                return memory.assignments(target);
             }
 
             @Override
-            public boolean replace(String target, List<Role> expected, List<Role> updated) {
+            public boolean replace(String target, List<RoleAssignment> expected, List<RoleAssignment> updated) {
                 if (calls.getAndIncrement() == 0) {
                     // someone else switches the plan first
-                    memory.replace(target, expected, List.of(max20));
+                    memory.replace(target, expected, List.of(new RoleAssignment(max20, null)));
                 }
                 return memory.replace(target, expected, updated);
             }
@@ -438,7 +440,7 @@ class RoleAssignmentsTest {
 
         assertEquals(RoleAssignmentStatus.REPLACED, result.status());
         assertEquals(Optional.of(max20), result.previousRole());
-        assertEquals(List.of(max5), memory.roles("alice"));
+        assertEquals(List.of(new RoleAssignment(max5, null)), memory.assignments("alice"));
     }
 
     @Test
@@ -538,8 +540,11 @@ class RoleAssignmentsTest {
         Role restricted = role("restricted", null, "users.*", "-users.delete");
         Role deleter = role("deleter", null, "users.delete");
 
-        assertFalse(PermissionResolutionPolicy.DENY_OVERRIDES.hasPermission(List.of(restricted, deleter), "users.delete"));
-        assertFalse(PermissionResolutionPolicy.DENY_OVERRIDES.hasPermission(List.of(deleter, restricted), "users.delete"));
+        RoleAssignment r = new RoleAssignment(restricted, null);
+        RoleAssignment d = new RoleAssignment(deleter, null);
+
+        assertFalse(PermissionResolutionPolicy.DENY_OVERRIDES.hasPermission(List.of(r, d), "users.delete", null));
+        assertFalse(PermissionResolutionPolicy.DENY_OVERRIDES.hasPermission(List.of(d, r), "users.delete", null));
     }
 
     @Test
@@ -548,8 +553,9 @@ class RoleAssignmentsTest {
         Role pro = role("plan_pro", plan, "app.*");
         Role banned = role("banned", null);
         // a "banned" role blocks everything, whatever else is held
-        PermissionResolutionPolicy bannedBlocks = (roles, node) ->
-                !roles.contains(banned) && PermissionResolutionPolicy.ALLOW_OVERRIDES.hasPermission(roles, node);
+        PermissionResolutionPolicy bannedBlocks = (held, node, context) ->
+                held.stream().noneMatch(a -> a.role().equals(banned))
+                        && PermissionResolutionPolicy.ALLOW_OVERRIDES.hasPermission(held, node, context);
         RoleAssignments<String> assignments = new RoleAssignments<>();
         PermissionSubject alice = assignments.subject("alice", bannedBlocks);
         assignments.assign("alice", pro);
@@ -603,5 +609,396 @@ class RoleAssignmentsTest {
         assignments.assign("alice", role("r", null));
 
         assertThrows(UnsupportedOperationException.class, () -> assignments.roles("alice").clear());
+    }
+
+    // --- contexts -------------------------------------------------------------
+
+    private static final String A123 = "academy:123";
+    private static final String A456 = "academy:456";
+
+    @Test
+    void theSameRoleCanBeHeldInSeveralContexts() {
+        Role teacher = role("teacher", null, "students.*");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+
+        assertEquals(RoleAssignmentStatus.ASSIGNED, assignments.assign("alice", teacher, A123).status());
+        assertEquals(RoleAssignmentStatus.ASSIGNED, assignments.assign("alice", teacher, A456).status());
+        assertEquals(RoleAssignmentStatus.NO_CHANGE, assignments.assign("alice", teacher, A123).status());
+
+        assertEquals(List.of(teacher), assignments.roles("alice", A123));
+        assertEquals(List.of(teacher), assignments.roles("alice", A456));
+        assertEquals(List.of(), assignments.roles("alice"));
+        assertEquals(List.of(new RoleAssignment(teacher, A123), new RoleAssignment(teacher, A456)),
+                assignments.assignments("alice"));
+    }
+
+    @Test
+    void groupLimitsAreCountedPerContext() {
+        RoleGroup membership = group("membership", 0, 1, RoleAssignmentPolicy.REJECT);
+        Role teacher = role("teacher", membership);
+        Role student = role("student", membership);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+
+        assertEquals(RoleAssignmentStatus.ASSIGNED, assignments.assign("alice", teacher, A123).status());
+        assertEquals(RoleAssignmentStatus.ASSIGNED, assignments.assign("alice", student, A456).status());
+        assertEquals(RoleAssignmentStatus.ASSIGNED, assignments.assign("alice", student).status());
+        assertEquals(RoleAssignmentStatus.REJECTED, assignments.assign("alice", student, A123).status());
+    }
+
+    @Test
+    void aReplacementStaysInItsContext() {
+        RoleGroup membership = group("membership", 0, 1, RoleAssignmentPolicy.REPLACE_EXISTING);
+        Role teacher = role("teacher", membership);
+        Role student = role("student", membership);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", teacher, A123);
+        assignments.assign("alice", teacher, A456);
+
+        RoleAssignmentResult result = assignments.assign("alice", student, A123);
+
+        assertEquals(RoleAssignmentStatus.REPLACED, result.status());
+        assertEquals(Optional.of(A123), result.context());
+        assertEquals(List.of(teacher), result.removedRoles());
+        assertEquals(List.of(student), assignments.roles("alice", A123));
+        assertEquals(List.of(teacher), assignments.roles("alice", A456));
+    }
+
+    @Test
+    void unassignTouchesOnlyThatContext() {
+        RoleGroup membership = group("membership", 1, 1, RoleAssignmentPolicy.REPLACE_EXISTING);
+        Role teacher = role("teacher", membership);
+        Role reader = role("reader", null);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", reader, A123);
+        assignments.assign("alice", reader, A456);
+        assignments.assign("alice", teacher, A123);
+
+        RoleAssignmentResult unassigned = assignments.unassign("alice", reader, A123);
+        RoleAssignmentResult notHeld = assignments.unassign("alice", reader);
+        RoleAssignmentResult belowMinimum = assignments.unassign("alice", teacher, A123);
+
+        assertEquals(RoleAssignmentStatus.UNASSIGNED, unassigned.status());
+        assertEquals(Optional.of(A123), unassigned.context());
+        assertEquals(List.of(reader), assignments.roles("alice", A456));
+        assertEquals(RoleAssignmentStatus.NO_CHANGE, notHeld.status());
+        assertEquals(Optional.empty(), notHeld.context());
+        assertEquals(RoleAssignmentStatus.REJECTED, belowMinimum.status());
+        assertTrue(belowMinimum.rejectionReason().orElseThrow().contains(A123));
+        assertEquals(List.of(teacher), assignments.roles("alice", A123));
+    }
+
+    @Test
+    void underGlobalFallbackARoleWithoutAContextAppliesEverywhere() {
+        Role staff = role("staff", null, "students.read");
+        Role teacher = role("teacher", null, "students.edit");
+        RoleAssignments<String> assignments = new RoleAssignments<>(
+                new MemoryRoleAssignmentStore<>(), ContextPolicy.GLOBAL_FALLBACK);
+        assignments.assign("alice", staff);
+        assignments.assign("alice", teacher, A123);
+        PermissionSubject alice = assignments.subject("alice");
+
+        assertTrue(alice.hasPermission("students.read"));
+        assertTrue(alice.hasPermission("students.read", A123));
+        assertTrue(alice.hasPermission("students.read", A456));
+        assertTrue(alice.hasPermission("students.edit", A123));
+        assertFalse(alice.hasPermission("students.edit", A456));
+        assertFalse(alice.hasPermission("students.edit"));
+    }
+
+    @Test
+    void underExactOnlyRolesInTheCheckedContextApply() {
+        Role staff = role("staff", null, "students.read");
+        Role teacher = role("teacher", null, "students.edit");
+        RoleAssignments<String> assignments = new RoleAssignments<>(
+                new MemoryRoleAssignmentStore<>(), ContextPolicy.EXACT);
+        assignments.assign("alice", staff);
+        assignments.assign("alice", teacher, A123);
+        PermissionSubject alice = assignments.subject("alice");
+
+        assertTrue(alice.hasPermission("students.read"));
+        assertFalse(alice.hasPermission("students.read", A123));
+        assertTrue(alice.hasPermission("students.edit", A123));
+        assertFalse(alice.hasPermission("students.edit"));
+    }
+
+    @Test
+    void aRoleBackedBySubjectIsAskedWithoutAContext() {
+        MemoryPermissionSubject source = new MemoryPermissionSubject();
+        source.grant("students.read");
+        source.grant("students.edit", A456);
+        Role teacher = Role.builder("teacher").permissions(source).build();
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", teacher, A123);
+        PermissionSubject alice = assignments.subject("alice");
+
+        assertTrue(alice.hasPermission("students.read", A123));
+        assertFalse(alice.hasPermission("students.edit", A123));
+        assertFalse(alice.hasPermission("students.edit", A456)); // the role is not held there
+    }
+
+    @Test
+    void resolutionPoliciesCombineOnlyTheApplicableRoles() {
+        Role editor = role("editor", null, "users.*");
+        Role suspended = role("suspended", null, "-users.delete");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("bob", editor);
+        assignments.assign("bob", suspended, A123);
+
+        PermissionSubject allow = assignments.subject("bob");
+        PermissionSubject deny = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
+
+        // the role held in academy:123 covers users.delete, so it decides there, under either policy
+        assertFalse(allow.hasPermission("users.delete", A123));
+        assertFalse(deny.hasPermission("users.delete", A123));
+        assertTrue(allow.hasPermission("users.read", A123));
+        assertTrue(deny.hasPermission("users.delete", A456));
+        assertTrue(deny.hasPermission("users.delete"));
+    }
+
+    @Test
+    void aRoleHeldInTheContextOutranksAGlobalRoleLikeAGrantDoes() {
+        Role restricted = role("restricted", null, "-students.*");
+        Role teacher = role("teacher", null, "students.*");
+        RoleAssignments<String> assignments = new RoleAssignments<>(
+                new MemoryRoleAssignmentStore<>(), ContextPolicy.GLOBAL_FALLBACK);
+        assignments.assign("alice", restricted);
+        assignments.assign("alice", teacher, A123);
+        MemoryPermissionSubject direct = new MemoryPermissionSubject(ContextPolicy.GLOBAL_FALLBACK);
+        direct.grant("-students.*");
+        direct.grant("students.*", A123);
+
+        for (PermissionResolutionPolicy policy : List.of(
+                PermissionResolutionPolicy.ALLOW_OVERRIDES, PermissionResolutionPolicy.DENY_OVERRIDES)) {
+            PermissionSubject alice = assignments.subject("alice", policy);
+            assertTrue(alice.hasPermission("students.edit", A123));
+            assertFalse(alice.hasPermission("students.edit", A456));
+            assertFalse(alice.hasPermission("students.edit"));
+            for (String context : Arrays.asList(A123, A456, null)) {
+                assertEquals(direct.hasPermission("students.edit", context),
+                        alice.hasPermission("students.edit", context), "in " + context);
+            }
+        }
+    }
+
+    @Test
+    void globalRolesDecideWhereTheContextSaysNothing() {
+        Role editor = role("editor", null, "users.*", "-users.delete");
+        Role teacher = role("teacher", null, "students.*");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("bob", editor);
+        assignments.assign("bob", teacher, A123);
+        PermissionSubject bob = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
+
+        assertTrue(bob.hasPermission("users.read", A123));
+        assertFalse(bob.hasPermission("users.delete", A123));
+        assertTrue(bob.hasPermission("students.edit", A123));
+    }
+
+    @Test
+    void aSubjectBackedRoleInTheContextFallsBackToGlobalRolesWhereItSaysNothing() {
+        MemoryPermissionSubject source = new MemoryPermissionSubject();
+        source.grant("students.read");
+        Role viewer = Role.builder("viewer").permissions(source).build();
+        Role staff = role("staff", null, "students.edit");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", staff);
+        assignments.assign("alice", viewer, A123);
+
+        for (PermissionResolutionPolicy policy : List.of(
+                PermissionResolutionPolicy.ALLOW_OVERRIDES, PermissionResolutionPolicy.DENY_OVERRIDES)) {
+            PermissionSubject alice = assignments.subject("alice", policy);
+            assertTrue(alice.hasPermission("students.read", A123));
+            assertTrue(alice.hasPermission("students.edit", A123));
+            assertFalse(alice.hasPermission("students.delete", A123));
+        }
+    }
+
+    @Test
+    void underExactADenyOnlyRoleInTheContextIsTheOnlyLayer() {
+        Role suspended = role("suspended", null, "-students.edit");
+        Role staff = role("staff", null, "students.*");
+        RoleAssignments<String> assignments = new RoleAssignments<>(
+                new MemoryRoleAssignmentStore<>(), ContextPolicy.EXACT);
+        assignments.assign("alice", staff);
+        assignments.assign("alice", suspended, A123);
+
+        assertFalse(assignments.subject("alice").hasPermission("students.edit", A123));
+        assertFalse(assignments.subject("alice").hasPermission("students.read", A123));
+        assertTrue(assignments.subject("alice").hasPermission("students.edit"));
+    }
+
+    @Test
+    void theBuiltInPoliciesIgnoreAssignmentsHeldInAnotherContext() {
+        Role editor = role("editor", null, "users.*");
+        List<RoleAssignment> elsewhere = List.of(new RoleAssignment(editor, A456));
+
+        for (PermissionResolutionPolicy policy : List.of(
+                PermissionResolutionPolicy.ALLOW_OVERRIDES, PermissionResolutionPolicy.DENY_OVERRIDES)) {
+            assertFalse(policy.hasPermission(elsewhere, "users.read", A123));
+            assertFalse(policy.hasPermission(elsewhere, "users.read", null));
+            assertTrue(policy.hasPermission(elsewhere, "users.read", A456));
+        }
+    }
+
+    @Test
+    void denyOverridesStillVetoesWithinTheContextLayer() {
+        Role reader = role("reader", null, "students.*");
+        Role suspended = role("suspended", null, "-students.edit");
+        Role staff = role("staff", null, "students.edit");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("bob", staff);
+        assignments.assign("bob", reader, A123);
+        assignments.assign("bob", suspended, A123);
+
+        assertFalse(assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES)
+                .hasPermission("students.edit", A123));
+        assertTrue(assignments.subject("bob").hasPermission("students.edit", A123));
+    }
+
+    @Test
+    void aCustomResolutionPolicySeesTheApplicableAssignmentsAndTheContext() {
+        Role staff = role("staff", null, "a.read");
+        Role teacher = role("teacher", null, "a.read");
+        Role other = role("other", null, "a.read");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", staff);
+        assignments.assign("alice", teacher, A123);
+        assignments.assign("alice", other, A456);
+        List<Object> seen = new ArrayList<>();
+        PermissionResolutionPolicy recording = (held, node, context) -> {
+            seen.add(held);
+            seen.add(node);
+            seen.add(context);
+            return false;
+        };
+
+        assignments.subject("alice", recording).hasPermission("a.read", A123);
+
+        assertEquals(List.of(
+                List.of(new RoleAssignment(staff, null), new RoleAssignment(teacher, A123)), "a.read", A123), seen);
+    }
+
+    @Test
+    void anEmptyContextIsRejected() {
+        Role r = role("r", null);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+
+        assertThrows(IllegalArgumentException.class, () -> assignments.assign("alice", r, ""));
+        assertThrows(IllegalArgumentException.class, () -> assignments.unassign("alice", r, ""));
+        assertThrows(IllegalArgumentException.class, () -> assignments.roles("alice", ""));
+        assertThrows(IllegalArgumentException.class, () -> assignments.subject("alice").hasPermission("a.read", ""));
+        assertThrows(IllegalArgumentException.class, () -> new RoleAssignment(r, ""));
+        assertThrows(NullPointerException.class, () -> new RoleAssignment(null, A123));
+    }
+
+    @Test
+    void assignmentsAndResultsShowTheirContext() {
+        Role teacher = role("teacher", null);
+
+        assertEquals("teacher @ academy:123", new RoleAssignment(teacher, A123).toString());
+        assertEquals("teacher", new RoleAssignment(teacher, null).toString());
+        assertTrue(new RoleAssignments<String>().assign("alice", teacher, A123).toString()
+                .contains("context=academy:123"));
+    }
+
+    @Test
+    void replaceOldestPicksByOrderWithinTheContextOnly() {
+        RoleGroup teams = group("teams", 0, 2, RoleAssignmentPolicy.REPLACE_OLDEST);
+        Role a = role("team_a", teams);
+        Role b = role("team_b", teams);
+        Role c = role("team_c", teams);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", a, A456); // oldest overall, but in another context
+        assignments.assign("alice", b, A123);
+        assignments.assign("alice", a, A123);
+
+        RoleAssignmentResult result = assignments.assign("alice", c, A123);
+
+        assertEquals(List.of(b), result.removedRoles());
+        assertEquals(List.of(a, c), assignments.roles("alice", A123));
+        assertEquals(List.of(a), assignments.roles("alice", A456));
+    }
+
+    @Test
+    void aPolicyCannotReplaceARoleHeldInAnotherContext() {
+        Role[] elsewhere = new Role[1];
+        // a buggy policy that always replaces the role held in academy:456
+        RoleGroup membership = group("membership", 0, 1,
+                (g, held, requested) -> RoleAssignmentDecision.replace(List.of(elsewhere[0])));
+        Role x = role("member_x", membership);
+        Role y = role("member_y", membership);
+        Role z = role("member_z", membership);
+        elsewhere[0] = x;
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", x, A456);
+        assignments.assign("alice", y, A123);
+
+        assertThrows(IllegalStateException.class, () -> assignments.assign("alice", z, A123));
+        assertEquals(List.of(y), assignments.roles("alice", A123));
+        assertEquals(List.of(x), assignments.roles("alice", A456));
+    }
+
+    @Test
+    void aConflictingGroupDefinitionFailsEvenWhenHeldInAnotherContext() {
+        Role loose = role("team_a", group("teams", 0, 5, RoleAssignmentPolicy.REJECT));
+        Role strict = role("team_b", group("teams", 0, 1, RoleAssignmentPolicy.REJECT));
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("alice", loose, A456);
+
+        assertThrows(IllegalStateException.class, () -> assignments.assign("alice", strict, A123));
+        assertEquals(List.of(), assignments.roles("alice", A123));
+    }
+
+    @Test
+    void denyOverridesUnderExactIgnoresRolesHeldElsewhere() {
+        Role editor = role("editor", null, "users.*");
+        Role suspended = role("suspended", null, "-users.delete");
+        RoleAssignments<String> assignments = new RoleAssignments<>(new MemoryRoleAssignmentStore<>(), ContextPolicy.EXACT);
+        assignments.assign("bob", editor, A123);
+        assignments.assign("bob", suspended);
+        PermissionSubject bob = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
+
+        assertTrue(bob.hasPermission("users.delete", A123));
+        assertFalse(bob.hasPermission("users.delete"));
+        assertFalse(bob.hasPermission("users.read"));
+    }
+
+    @Test
+    void concurrentAssignmentsKeepEachContextWithinItsLimits() throws Exception {
+        RoleGroup membership = group("membership", 0, 1, RoleAssignmentPolicy.REPLACE_EXISTING);
+        List<Role> roles = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            roles.add(role("member_" + i, membership));
+        }
+        List<String> contexts = List.of(A123, A456, "academy:789");
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        ExecutorService pool = Executors.newFixedThreadPool(roles.size() * contexts.size());
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        try {
+            for (String context : contexts) {
+                for (Role r : roles) {
+                    futures.add(pool.submit(() -> {
+                        start.await();
+                        for (int i = 0; i < 100; i++) {
+                            assignments.assign("alice", r, context);
+                            assertEquals(1, assignments.roles("alice", context).size());
+                        }
+                        return null;
+                    }));
+                }
+            }
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        for (String context : contexts) {
+            assertEquals(1, assignments.roles("alice", context).size());
+        }
+        assertEquals(contexts.size(), assignments.assignments("alice").size());
     }
 }

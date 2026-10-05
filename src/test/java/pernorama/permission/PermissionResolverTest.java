@@ -5,6 +5,7 @@ import pernorama.exception.InvalidPermissionException;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -184,5 +185,32 @@ class PermissionResolverTest {
     void everyRuleIsValidatedEvenAfterOneAlreadyCoversTheNode() {
         assertThrows(InvalidPermissionException.class,
                 () -> PermissionResolver.matchesAny(List.of("*", "users..bad"), "users.read"));
+    }
+
+    @Test
+    void decideTellsADenialFromANodeNoRuleCovers() {
+        assertEquals(PermissionResolver.Decision.PERMITTED,
+                PermissionResolver.decide(List.of("users.*", "-users.delete"), "users.create"));
+        assertEquals(PermissionResolver.Decision.DENIED,
+                PermissionResolver.decide(List.of("users.*", "-users.delete"), "users.delete"));
+        assertEquals(PermissionResolver.Decision.NOT_COVERED,
+                PermissionResolver.decide(List.of("users.*", "-users.delete"), "posts.read"));
+        assertEquals(PermissionResolver.Decision.NOT_COVERED, PermissionResolver.decide(List.of(), "posts.read"));
+    }
+
+    @Test
+    void decideAppliesTheSamePrecedenceAsMatchesAny() {
+        // a deny wins a tie; a more specific rule wins regardless of kind
+        assertEquals(PermissionResolver.Decision.DENIED,
+                PermissionResolver.decide(List.of("users.*", "-users.*"), "users.read"));
+        assertEquals(PermissionResolver.Decision.DENIED, PermissionResolver.decide(List.of("*", "-*"), "users.read"));
+        assertEquals(PermissionResolver.Decision.PERMITTED,
+                PermissionResolver.decide(List.of("-users.*", "users.read"), "users.read"));
+        assertEquals(PermissionResolver.Decision.DENIED,
+                PermissionResolver.decide(List.of("users.profile.*", "-users.profile.edit"), "users.profile.edit"));
+        assertEquals(PermissionResolver.Decision.PERMITTED,
+                PermissionResolver.decide(List.of("-*", "users.*"), "users.read"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionResolver.decide(List.of("users..x"), "a.b"));
+        assertThrows(InvalidPermissionException.class, () -> PermissionResolver.decide(List.of("a.*"), "a.*"));
     }
 }

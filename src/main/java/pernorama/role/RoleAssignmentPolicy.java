@@ -60,8 +60,10 @@ public interface RoleAssignmentPolicy {
      * Decides an assignment that would go over the group's maximum.
      *
      * @param group     the group of {@code requested}, whose limits apply
-     * @param held      the roles the target holds in {@code group},
-     *                  oldest assignment first; unmodifiable
+     * @param held      the roles the target holds in {@code group} in the
+     *                  context being assigned in, oldest assignment first;
+     *                  unmodifiable. Roles held in other contexts are not
+     *                  counted and cannot be replaced.
      * @param requested the role being assigned, not in {@code held}
      * @return the decision; never {@code null}
      */

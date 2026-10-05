@@ -157,27 +157,71 @@ public final class PermissionResolver {
      *         a valid permission node
      */
     public static boolean matchesAny(Iterable<String> patterns, String required) {
+        return decide(patterns, required) == Decision.PERMITTED;
+    }
+
+    /** The three-way answer of {@link #decide(Iterable, String)}. */
+    public enum Decision {
+        /** The rule that decides the node is an allow rule. */
+        PERMITTED,
+        /** The rule that decides the node is a deny rule. */
+        DENIED,
+        /** No rule covers the node at all. */
+        NOT_COVERED
+    }
+
+    /**
+     * The three-way answer behind {@link #matchesAny(Iterable, String)}:
+     * {@link Decision#PERMITTED} or {@link Decision#DENIED} by the rule
+     * that decides the node, or {@link Decision#NOT_COVERED} if no rule
+     * covers it. Telling the last two apart is what lets
+     * {@link ContextPolicy} fall back from one set of rules to the next
+     * only when the first says nothing, and what lets a role report an
+     * explicit denial.
+     *
+     * @throws InvalidPermissionException if any rule in {@code patterns}
+     *         is not a valid permission rule, or {@code required} is not
+     *         a valid permission node
+     */
+    public static Decision decide(Iterable<String> patterns, String required) {
         validateNode(required);
 
-        int best = -1;
-        boolean permitted = false;
-
+        int best = NOT_COVERING;
         for (String pattern : patterns) {
             validateRule(pattern);
-            boolean deny = isDeny(pattern);
-            int score = specificity(deny ? pattern.substring(1) : pattern, required);
-            if (score < 0) {
-                continue;
-            }
-            if (score > best) {
-                best = score;
-                permitted = !deny;
-            } else if (score == best && deny) {
-                permitted = false;
-            }
+            best = Math.max(best, rank(pattern, required));
         }
+        return decision(best);
+    }
 
-        return permitted;
+    /** {@link #rank}: the rule does not cover the node. */
+    static final int NOT_COVERING = -1;
+
+    /**
+     * How strongly {@code rule} — a valid rule, deny prefix included —
+     * speaks for {@code required}, a valid node, or {@link #NOT_COVERING}.
+     * The highest rank among a set of rules decides the node: it orders
+     * rules by specificity, and a deny rule ranks just above an allow
+     * rule of the same specificity, so a deny wins a tie. An odd rank is
+     * a deny. Callers keep the maximum and turn it into a
+     * {@link Decision} with {@link #decision(int)}, which lets
+     * {@link ContextPolicy} rank several layers of grants in one pass.
+     */
+    static int rank(String rule, String required) {
+        boolean deny = isDeny(rule);
+        int score = specificity(deny ? rule.substring(1) : rule, required);
+        if (score < 0) {
+            return NOT_COVERING;
+        }
+        return 2 * score + (deny ? 1 : 0);
+    }
+
+    /** The {@link Decision} of a set of rules whose highest {@link #rank} is {@code best}. */
+    static Decision decision(int best) {
+        if (best == NOT_COVERING) {
+            return Decision.NOT_COVERED;
+        }
+        return (best & 1) == 0 ? Decision.PERMITTED : Decision.DENIED;
     }
 
     private static void validateRule(String pattern) {
@@ -186,7 +230,7 @@ public final class PermissionResolver {
         }
     }
 
-    private static void validateNode(String required) {
+    static void validateNode(String required) {
         if (!PermissionNode.isValid(required)) {
             throw new InvalidPermissionException(required);
         }

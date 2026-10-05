@@ -2,8 +2,11 @@ package pernorama.subject;
 
 import org.junit.jupiter.api.Test;
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.ContextPolicy;
+import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -89,15 +92,17 @@ class MemoryPermissionSubjectTest {
 
         assertTrue(subject.hasPermission("users.create"));
         assertTrue(subject.hasPermission("posts.read"));
-        assertEquals(Set.of("users.create", "posts.read"), subject.grantedPermissions());
+        assertEquals(Set.of(new PermissionGrant("users.create", null), new PermissionGrant("posts.read", null)),
+                subject.grants());
     }
 
     @Test
-    void grantedPermissionsViewIsUnmodifiable() {
+    void grantsViewIsUnmodifiable() {
         MemoryPermissionSubject subject = new MemoryPermissionSubject();
         subject.grant("users.create");
 
-        assertThrows(UnsupportedOperationException.class, () -> subject.grantedPermissions().add("users.delete"));
+        assertThrows(UnsupportedOperationException.class,
+                () -> subject.grants().add(new PermissionGrant("users.delete", null)));
     }
 
     @Test
@@ -134,7 +139,7 @@ class MemoryPermissionSubjectTest {
         for (int i = 0; i < threadCount; i++) {
             assertTrue(subject.hasPermission("users.perm" + i));
         }
-        assertEquals(threadCount, subject.grantedPermissions().size());
+        assertEquals(threadCount, subject.grants().size());
     }
 
     @Test
@@ -166,7 +171,7 @@ class MemoryPermissionSubjectTest {
             pool.shutdownNow();
         }
 
-        assertTrue(subject.grantedPermissions().size() <= 1,
+        assertTrue(subject.grants().size() <= 1,
                 "granted set should never hold more than one entry for a single racing permission");
     }
 
@@ -286,5 +291,106 @@ class MemoryPermissionSubjectTest {
         subject.grant("-users.delete");
 
         assertThrows(InvalidPermissionException.class, () -> subject.hasPermission("-users.delete"));
+    }
+
+    // --- contexts -------------------------------------------------------------
+
+    @Test
+    void theNoArgumentConstructorsUseGlobalFallback() {
+        assertEquals(ContextPolicy.GLOBAL_FALLBACK, new MemoryPermissionSubject().contextPolicy());
+        assertEquals(ContextPolicy.GLOBAL_FALLBACK, new MemoryPermissionSubject(List.of("a")).contextPolicy());
+    }
+
+    @Test
+    void theSameRuleCanBeGrantedInSeveralContexts() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject(ContextPolicy.EXACT);
+        subject.grant("students.edit", "academy:123");
+        subject.grant("students.edit", "academy:456");
+        subject.grant("students.edit");
+
+        assertEquals(Set.of(
+                new PermissionGrant("students.edit", "academy:123"),
+                new PermissionGrant("students.edit", "academy:456"),
+                new PermissionGrant("students.edit", null)), subject.grants());
+    }
+
+    @Test
+    void revokeRemovesOnlyTheGrantInThatContext() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject(ContextPolicy.EXACT);
+        subject.grant("students.edit", "academy:123");
+        subject.grant("students.edit", "academy:456");
+        subject.grant("students.edit");
+
+        subject.revoke("students.edit", "academy:123");
+
+        assertFalse(subject.hasPermission("students.edit", "academy:123"));
+        assertTrue(subject.hasPermission("students.edit", "academy:456"));
+        assertTrue(subject.hasPermission("students.edit"));
+
+        subject.revoke("students.edit");
+
+        assertFalse(subject.hasPermission("students.edit"));
+        assertTrue(subject.hasPermission("students.edit", "academy:456"));
+    }
+
+    @Test
+    void theNodeOverloadsTakeAContextToo() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject(ContextPolicy.EXACT);
+        PermissionNode node = PermissionNode.of("students.edit");
+
+        subject.grant(node, "academy:123");
+        assertTrue(subject.hasPermission(node, "academy:123"));
+        assertFalse(subject.hasPermission(node));
+
+        subject.revoke(node, "academy:123");
+        assertFalse(subject.hasPermission(node, "academy:123"));
+    }
+
+    @Test
+    void anEmptyContextIsRejectedEverywhere() {
+        MemoryPermissionSubject subject = new MemoryPermissionSubject();
+
+        assertThrows(IllegalArgumentException.class, () -> subject.grant("users.read", ""));
+        assertThrows(IllegalArgumentException.class, () -> subject.revoke("users.read", ""));
+        assertThrows(IllegalArgumentException.class, () -> subject.hasPermission("users.read", ""));
+        assertThrows(InvalidPermissionException.class, () -> subject.grant("users..read", "academy:123"));
+    }
+
+    @Test
+    void thePreGrantingConstructorTakesAPolicy() {
+        MemoryPermissionSubject strict = new MemoryPermissionSubject(ContextPolicy.EXACT, List.of("students.read"));
+        MemoryPermissionSubject loose = new MemoryPermissionSubject(List.of("students.read"));
+
+        assertEquals(ContextPolicy.EXACT, strict.contextPolicy());
+        assertFalse(strict.hasPermission("students.read", "academy:123"));
+        assertEquals(ContextPolicy.GLOBAL_FALLBACK, loose.contextPolicy());
+        assertTrue(loose.hasPermission("students.read", "academy:123"));
+    }
+
+    @Test
+    void theOverloadsWithoutAContextAreFinal() throws Exception {
+        for (String name : List.of("hasPermission", "grant", "revoke")) {
+            assertTrue(Modifier.isFinal(MemoryPermissionSubject.class.getMethod(name, String.class).getModifiers()),
+                    name);
+            assertFalse(Modifier.isFinal(
+                    MemoryPermissionSubject.class.getMethod(name, String.class, String.class).getModifiers()), name);
+        }
+    }
+
+    @Test
+    void aSubclassOverridingTheContextMethodIsReachedWithoutAContextToo() {
+        Set<String> checked = ConcurrentHashMap.newKeySet();
+        MemoryPermissionSubject audited = new MemoryPermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                checked.add(node + "@" + context);
+                return super.hasPermission(node, context);
+            }
+        };
+        audited.grant("users.read");
+
+        assertTrue(audited.hasPermission("users.read"));
+        assertTrue(new CompositePermissionSubject(audited).hasPermission("users.read"));
+        assertEquals(Set.of("users.read@null"), checked);
     }
 }

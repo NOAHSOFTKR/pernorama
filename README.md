@@ -234,8 +234,134 @@ start with `-`**. The character is still legal anywhere else, so
 this: `matches(rule, node)` answers "does this rule *allow* the node"
 and is therefore `false` for any deny rule, and `denies(rule, node)` is
 its mirror. `matchesAny(rules, node)` is the one that applies the
-precedence above to a whole set — it is what `MemoryPermissionSubject`
-calls, and what a custom subject should call too.
+precedence above to a whole set; a subject whose grants can carry a
+context goes through `ContextPolicy.permits` instead, which applies the
+same precedence within each context (see [Contexts](#contexts)).
+
+## Contexts
+
+A grant can be scoped to a **context**, so the same subject can hold a
+permission in one scope and not another — the shape of multi-tenant or
+resource-grouped authorization:
+
+```text
+students.read @ academy:123
+guild.manage  @ guild:987654321
+project.write @ project:01J8XYZ...
+```
+
+> A context is an opaque, application-defined string identifying the
+> scope in which a permission applies. Pernorama does not generate,
+> parse, validate, or interpret context values.
+
+Every `grant`, `revoke` and `hasPermission` takes an optional context
+as its second argument; leaving it out is the same as passing `null`,
+which means "no context":
+
+```java
+Pernorama pernorama = Pernorama.builder()
+        .contextPolicy(ContextPolicy.GLOBAL_FALLBACK)
+        .build();
+
+MemoryPermissionSubject user = pernorama.newSubject();
+user.grant("students.read");
+user.grant("students.edit", "academy:123");
+
+user.hasPermission("students.read");                 // true
+user.hasPermission("students.read", "academy:456");  // true, a global grant applies everywhere
+user.hasPermission("students.edit", "academy:123");  // true
+user.hasPermission("students.edit", "academy:456");  // false
+user.hasPermission("students.edit");                 // false
+
+user.revoke("students.edit", "academy:123");         // removes only that grant
+```
+
+Two contexts match only if they are equal strings. `academy:*` is not
+a wildcard, `academy` is not a parent of `academy:123`, and
+`role == ADMIN` is not an expression — they are just strings. The one
+rule Pernorama applies is that "no context" has a single spelling,
+`null`; an empty string is rejected with `IllegalArgumentException`.
+
+`Permission.check` and `Permission.require` take a context too, and the
+`PermissionDeniedException` thrown by `require` reports it in
+`context()`.
+
+### Context policy
+
+Whether a grant *without* a context also applies *inside* one is
+decided by the `ContextPolicy`, chosen once for a whole `Pernorama`
+instance — individual permissions never carry their own:
+
+- **`GLOBAL_FALLBACK`** (the default) — a grant without a context is
+  global and applies in every context, underneath the grants made for
+  that context.
+- **`EXACT`** — grants with and without a context are separate. A check
+  in `academy:123` sees only grants scoped to exactly `academy:123`.
+
+```java
+Pernorama strict = Pernorama.builder()
+        .contextPolicy(ContextPolicy.EXACT)
+        .build();
+
+MemoryPermissionSubject user = strict.newSubject();
+user.grant("students.read");
+
+user.hasPermission("students.read");                // true
+user.hasPermission("students.read", "academy:123"); // false
+
+user.grant("students.read", "academy:123");
+
+user.hasPermission("students.read", "academy:123"); // true
+```
+
+Under both policies a check *without* a context sees only grants
+without one. Create subjects and role assignments through your
+`Pernorama` instance so they all share its policy —
+`pernorama.newSubject(List.of(...))` pre-grants rules the same way; the
+constructors that take no policy (`new MemoryPermissionSubject()`,
+`new MemoryPermissionSubject(rules)`, `new RoleAssignments<>()`) use
+`GLOBAL_FALLBACK`. An application that needs different semantics for
+different domains uses one instance per domain.
+
+### Contexts and deny rules
+
+Under `GLOBAL_FALLBACK`, a check in a context goes through two layers:
+
+1. **The grants scoped to that context.** If any of their rules — allow
+   or deny — covers the node, they decide, with the usual precedence
+   among themselves.
+2. **Only if none of them covers it**, the grants without a context
+   decide.
+
+So a context can carve an exception out of a global grant:
+
+```java
+MemoryPermissionSubject teacher = pernorama.newSubject();
+teacher.grant("students.*");
+teacher.grant("-students.delete", "academy:123");
+
+teacher.hasPermission("students.delete", "academy:123"); // false
+teacher.hasPermission("students.delete", "academy:456"); // true
+```
+
+A context overrides the global grants for **every node it says anything
+about**, even with a less specific rule than the global one — and it
+can re-allow what a global rule denies:
+
+```java
+MemoryPermissionSubject manager = pernorama.newSubject();
+manager.grant("students.delete");
+manager.grant("-students.*", "academy:123");
+
+manager.hasPermission("students.delete", "academy:123"); // false, the context covers it
+manager.hasPermission("students.delete", "academy:456"); // true, falls back to the global grant
+```
+
+Within one layer nothing changes: the most specific rule decides and a
+deny wins a tie. Under `EXACT` there is only one layer, the grants in
+the checked context. `PermissionResolver` itself never sees a context;
+`ContextPolicy` only decides which grants it is given, and in what
+order.
 
 ## Annotations
 
@@ -360,31 +486,88 @@ class DiscordMember implements PermissionSubject { /* backed by Discord roles */
 class JwtPrincipal implements PermissionSubject { /* backed by a JWT claim */ }
 ```
 
-At minimum, `hasPermission`/`grant`/`revoke` need to agree on how
-granted strings are matched. Reusing `PermissionResolver` gets you the
-same wildcard and deny-rule semantics as `MemoryPermissionSubject` for
-free:
+An implementation provides the three methods that take a context —
+`hasPermission(node, context)`, `grant(node, context)` and
+`revoke(node, context)`; the overloads without one are default methods
+passing `null`. The three need to agree on how granted rules are
+matched. Storing `PermissionGrant`s (a rule plus a nullable context) and
+asking your instance's `ContextPolicy` gets you the same wildcard,
+deny-rule and context semantics as `MemoryPermissionSubject` for free:
 
 ```java
 class DatabaseUser implements PermissionSubject {
 
-    private final Set<String> permissions = /* loaded from your storage */;
+    private final ContextPolicy contextPolicy;
+    private final Set<PermissionGrant> grants = new HashSet<>(); // loaded from your storage
 
-    @Override
-    public boolean hasPermission(String node) {
-        return PermissionResolver.matchesAny(permissions, node);
+    DatabaseUser(Pernorama pernorama) {
+        this.contextPolicy = pernorama.contextPolicy();
     }
 
     @Override
-    public void grant(String node) { permissions.add(node); }
+    public boolean hasPermission(String node, String context) {
+        return contextPolicy.permits(grants, node, context);
+    }
 
     @Override
-    public void revoke(String node) { permissions.remove(node); }
+    public void grant(String node, String context) {
+        grants.add(new PermissionGrant(node, context));
+    }
+
+    @Override
+    public void revoke(String node, String context) {
+        grants.remove(new PermissionGrant(node, context));
+    }
+}
+```
+
+In a table this is one row per grant — subject, rule, and a nullable
+context column. Load the rows for the subject whose context is the
+checked one or `NULL`, and let `permits` decide: the rule column can
+hold wildcards and deny rules, so the decision cannot be a plain
+`WHERE permission = ?`.
+
+A subject that never uses contexts can match plain rule strings with
+`PermissionResolver.matchesAny` — and should answer a contextual check
+explicitly rather than ignore the context:
+
+```java
+class ApiKey implements PermissionSubject {
+
+    private final Set<String> rules = new HashSet<>();
+
+    @Override
+    public boolean hasPermission(String node, String context) {
+        PermissionGrant.requireValidContext(context);
+        return PermissionResolver.matchesAny(rules, node) && context == null;
+    }
+
+    @Override
+    public void grant(String node, String context) {
+        rules.add(ruleWithoutContext(node, context));
+    }
+
+    @Override
+    public void revoke(String node, String context) {
+        rules.remove(ruleWithoutContext(node, context));
+    }
+
+    private static String ruleWithoutContext(String node, String context) {
+        PermissionGrant grant = new PermissionGrant(node, context); // validates both
+        if (grant.hasContext()) {
+            throw new UnsupportedOperationException("API keys have no contexts");
+        }
+        return grant.rule();
+    }
 }
 ```
 
 `MemoryPermissionSubject` remains the built-in, ready-to-use in-memory
-implementation, with the same `grant`/`revoke`/`hasPermission` API.
+implementation, with the same `grant`/`revoke`/`hasPermission` API. To
+extend it — to audit checks, say — override the methods that take a
+context: its overloads without one are `final`, because callers that
+pass a context, such as `CompositePermissionSubject`, call the
+two-argument methods directly.
 
 Nothing in `PermissionSubject` or the rest of the core API depends on
 Spring Security, Discord, JWT, OAuth2, a SQL database, or Redis — those
@@ -539,11 +722,17 @@ questions. The second is a `PermissionResolutionPolicy`, passed to
 
 - **`ALLOW_OVERRIDES`** (the default for `subject(target)`) — permitted
   if any role permits the node; a deny rule only limits the role holding
-  it. This is exactly `CompositePermissionSubject`'s behavior.
+  it. Without contexts this is exactly `CompositePermissionSubject`'s
+  behavior.
 - **`DENY_OVERRIDES`** — permitted if some role permits the node and no
   role *explicitly denies* it, so a deny rule in one role vetoes a grant
   in another. A role that simply does not mention the node vetoes
   nothing, and only a role built from rules can deny.
+
+Both combine the roles of one layer. In a check with a context, roles
+held in that context come before roles held without one, so a global
+deny does not veto a role held in the context that covers the node —
+see [Roles in a context](#roles-in-a-context).
 
 ```java
 Role editor = Role.builder("editor").permission("users.*").build();
@@ -557,15 +746,89 @@ assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES)
         .hasPermission("users.delete");                   // false
 ```
 
-`PermissionResolutionPolicy` is a one-method interface over the target's
-roles, so a different interpretation — ranking roles by group, say — is
-a lambda away.
+`PermissionResolutionPolicy` is a one-method interface over the
+target's assignments that apply to the check (see
+[Roles in a context](#roles-in-a-context)), so a different
+interpretation — ranking roles by group, say — is a lambda away.
 
 The subject is a read-only live view: each check reads the target's
 current roles, and `grant`/`revoke` throw
 `UnsupportedOperationException`. For permissions granted to a user
 directly, compose it: `new CompositePermissionSubject(own,
 assignments.subject("alice"))`.
+
+### Roles in a context
+
+A role can be assigned in a [context](#contexts) — a teacher in one
+academy and a student in another:
+
+```java
+Role teacher = Role.builder("teacher").permission("students.*").build();
+Role student = Role.builder("student").permission("students.read").build();
+
+RoleAssignments<String> assignments = pernorama.newRoleAssignments();
+assignments.assign("alice", teacher, "academy:123");
+assignments.assign("alice", student, "academy:456");
+
+PermissionSubject alice = assignments.subject("alice");
+alice.hasPermission("students.edit", "academy:123"); // true, as a teacher
+alice.hasPermission("students.edit", "academy:456"); // false, only a student there
+alice.hasPermission("students.read", "academy:456"); // true
+
+assignments.roles("alice", "academy:123"); // [teacher]
+```
+
+- **The context belongs to the assignment, not the role.** A role's
+  rules are the same wherever it is held, so one `teacher` role serves
+  every academy. `assign`, `unassign` and `roles` take the context as a
+  third argument; without one they mean "no context", exactly like
+  `grant`. The same role can be held in several contexts, and
+  `unassign` removes it from one.
+- **Where an assignment applies is up to the `ContextPolicy`**, as for
+  a grant: under `GLOBAL_FALLBACK` a role assigned without a context
+  applies in every context, under `EXACT` only to checks without one;
+  a role assigned in a context applies only there. `roles(target,
+  context)` lists what is held in exactly that context — so
+  `roles(target)` lists only the roles held without one — and
+  `assignments(target)` every `RoleAssignment` in every context.
+- **Group limits are counted per context.** Being a teacher in
+  `academy:123` does not stop an exclusive `membership` group from
+  holding a student role in `academy:456`; assignments without a
+  context are counted together as one more context. A replacement only
+  ever removes roles from the context being assigned in, and a policy
+  is only shown the roles held there. A group id still has one
+  definition everywhere: a conflicting definition held in any context
+  fails the call.
+- **Roles held in the context come first, as grants do.** Under
+  `GLOBAL_FALLBACK` the built-in policies see two layers, exactly like
+  [grants in a context](#contexts-and-deny-rules): if any role held in
+  the checked context permits or denies the node, those roles decide,
+  combined as above, and the roles held without a context decide only
+  otherwise. So a role held in `academy:123` can narrow or re-allow what
+  a global role says — in `academy:123` only — under either policy:
+
+  ```java
+  Role restricted = Role.builder("restricted").permission("-students.*").build();
+  assignments.assign("bob", restricted);           // no context
+  assignments.assign("bob", teacher, "academy:123");
+
+  PermissionSubject bob = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
+  bob.hasPermission("students.edit", "academy:123"); // true, the teacher role decides there
+  bob.hasPermission("students.edit", "academy:456"); // false, only the global role applies
+  ```
+
+  A custom policy receives every applicable `RoleAssignment`, from both
+  layers, and the context, and decides for itself how they relate.
+- **A role's own `permissions()` has no contexts.** Asked directly, a
+  role built from rules answers only checks without a context and is
+  `false` for a check in one, under either policy — like any subject
+  without contexts (see [Custom PermissionSubject](#custom-permissionsubject)).
+  Hold a role in a context through `RoleAssignments` instead of
+  composing `role.permissions()` into a `CompositePermissionSubject`.
+- **Results and stores carry the context.** `RoleAssignmentResult.context()`
+  says where a change happened, and `RoleAssignmentStore` reads and
+  compare-and-sets a list of `RoleAssignment`s — one row per target,
+  role id and nullable context in a relational store.
 
 ## Thread Safety
 
@@ -575,9 +838,9 @@ assignments.subject("alice"))`.
   `ConcurrentHashMap` key set, so reads never block on writes. Each
   call is atomic on its own, but a *multi-rule* update is not: between
   `grant("users.*")` and `grant("-users.delete")` another thread can
-  still see `users.delete` permitted. Pass the whole rule set to the
-  constructor before the subject is shared, or synchronize the update
-  yourself.
+  still see `users.delete` permitted. Pass the whole rule set to
+  `pernorama.newSubject(rules)` or the constructor before the subject
+  is shared, or synchronize the update yourself.
 - **`CompositePermissionSubject`** — immutable in itself; its source
   list is copied when it is constructed. Whether concurrent use is safe
   therefore depends entirely on the subjects it was given.
@@ -587,12 +850,14 @@ assignments.subject("alice"))`.
   target never leave a group over its limits: each one re-decides from
   fresh state if another got there first, so a custom
   `RoleAssignmentPolicy` may be called more than once and should have no
-  side effects. `Role` (built from rules) and `RoleGroup` are immutable;
-  a role built from a subject is as thread-safe as that subject.
+  side effects. `Role` (built from rules), `RoleGroup` and
+  `RoleAssignment` are immutable; a role built from a subject is as
+  thread-safe as that subject.
 - **`PermissionRegistry`** — not thread-safe. It is meant to be
   populated once at startup, on a single thread, before checks begin.
-- **`PermissionNode`, `PermissionResolver`, `PermissionAnnotationResolver`,
-  `Permission`, `PermissionInterceptor`** — stateless or immutable, and
+- **`Pernorama`, `ContextPolicy`, `PermissionGrant`, `PermissionNode`,
+  `PermissionResolver`, `PermissionAnnotationResolver`, `Permission`,
+  `PermissionInterceptor`** — stateless or immutable, and
   safe to share across threads. `PermissionAnnotationResolver` caches
   resolution in a `ConcurrentHashMap` per declaring class.
 - Any custom `PermissionSubject` implementation defines its own
