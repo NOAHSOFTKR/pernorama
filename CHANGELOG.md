@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Explaining a permission decision** ([#15](https://github.com/NOAHSOFTKR/pernorama/issues/15)).
+  `PermissionSubject.explain(node, context)` (and `explain(node)`)
+  answers *why* a check came out as it did, returning a
+  `PermissionExplanation` whose `allowed()` is always what
+  `hasPermission` returns for the same arguments:
+  - `decision()` — `PERMITTED`, `DENIED` or `NOT_COVERED`, or empty when
+    the subject cannot tell the last two apart.
+  - `matches()` — every applicable grant covering the node, in
+    precedence order, the deciding rule marked `decisive()`;
+    `decidingLayer()` (`EXACT_CONTEXT` or `GLOBAL_FALLBACK`) and
+    `contextPolicy()` for checks in a context.
+  - `contributions()` and `resolutionPolicy()` — for
+    `CompositePermissionSubject` (`ANY_SOURCE`) and role-assignment
+    subjects (`ALLOW_OVERRIDES`/`DENY_OVERRIDES`), one entry per source
+    or `RoleAssignment`, with its own explanation and whether it decided.
+  - `provenance()` — `COMPLETE`, `PARTIAL` or `UNAVAILABLE`, so a reason
+    that cannot be determined is never reported.
+
+  `ContextPolicy.explain(grants, node, context)` and
+  `PermissionResolver.explain(rules, node)` are the counterparts of
+  `permits` and `decide`, and run the same evaluation; a custom subject
+  can return them from its own `explain`. `PermissionExplanation.builder`
+  lets a custom subject or policy report what it knows.
+  `explain` consults the sources and roles a check would, in the same
+  order, and asks each source once; ones a check would not reach are
+  only observed, and one of those that throws is left out with
+  provenance `PARTIAL` instead of failing the explanation.
+- `./gradlew checkPathBenchmark`, a plain timing harness for the
+  `hasPermission` check path, for comparing commits.
+
+### Changed
+
+- `PermissionSubject` has two new default methods, `explain(node, context)`
+  and `explain(node)`. An existing implementation gets an explanation
+  that reports only its `hasPermission` answer, with provenance
+  `UNAVAILABLE`; override `explain(node, context)` to report more. An
+  implementation that already declares a method named `explain` with
+  these parameters has to rename or adapt it, and
+  `MemoryPermissionSubject.explain(node)` is `final`, like its other
+  overloads without a context. A `MemoryPermissionSubject` subclass that
+  overrides `hasPermission` gets an answer-only explanation, since its
+  grants no longer explain the answer; override `explain` to report them
+  if they still do.
+  `hasPermission` itself is unchanged and does no tracing.
+
 ## [0.3.0] - 2026-10-05
 
 ### Added

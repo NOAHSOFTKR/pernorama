@@ -1,8 +1,10 @@
 package pernorama.subject;
 
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.PermissionExplanation;
 import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
+import pernorama.permission.PermissionResolver;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -93,6 +95,110 @@ public final class CompositePermissionSubject implements PermissionSubject {
             }
         }
         return false;
+    }
+
+    /**
+     * Explains {@link #hasPermission(String, String)} with one
+     * {@linkplain PermissionExplanation#contributions() contribution} per
+     * source, in order, each carrying the source's own explanation, and
+     * {@linkplain PermissionExplanation#resolutionPolicy() resolution policy}
+     * {@code "ANY_SOURCE"}. Each source is asked once, through its own
+     * {@code explain}, whose answer is its {@code hasPermission} answer.
+     * <p>
+     * The sources {@code hasPermission} would consult — every one up to the
+     * first that permits — are consulted in the same order, and an
+     * exception from one of them propagates, as it would from the check.
+     * The sources after the first that permits cannot change the answer
+     * and are explained only to be reported: one that throws is left out
+     * of the contributions, and the provenance is then at most
+     * {@link PermissionExplanation.Provenance#PARTIAL}.
+     * <p>
+     * If the composite permits the node, the sources that permit it are
+     * {@linkplain PermissionExplanation.Contribution#decisive() decisive}.
+     * Otherwise the decision is {@link PermissionResolver.Decision#DENIED}
+     * if some source explicitly denies the node — those sources being
+     * decisive — {@link PermissionResolver.Decision#NOT_COVERED} if every
+     * source reports that nothing covers it, and unknown if neither can be
+     * told. The provenance is {@link PermissionExplanation.Provenance#COMPLETE}
+     * only if the decision is known and every source's explanation is
+     * complete.
+     *
+     * @throws InvalidPermissionException if {@code node} is not a
+     *         syntactically valid permission node
+     * @throws IllegalArgumentException if {@code context} is empty
+     */
+    @Override
+    public PermissionExplanation explain(String node, String context) {
+        if (!PermissionNode.isValid(node)) {
+            throw new InvalidPermissionException(node);
+        }
+        PermissionGrant.requireValidContext(context);
+
+        // Ask the sources hasPermission would ask, in its order, letting an
+        // exception propagate as it would there; once one permits, the rest
+        // are only observed, and one that throws is left out.
+        PermissionExplanation[] explained = new PermissionExplanation[sources.size()];
+        boolean allowed = false;
+        boolean anyFailed = false;
+        for (int i = 0; i < sources.size(); i++) {
+            if (!allowed) {
+                explained[i] = sources.get(i).explain(node, context);
+                allowed = explained[i].allowed();
+            } else {
+                try {
+                    explained[i] = sources.get(i).explain(node, context);
+                } catch (RuntimeException e) {
+                    anyFailed = true;
+                }
+            }
+        }
+
+        boolean anyDenied = false;
+        boolean allNotCovered = true;
+        boolean allComplete = !anyFailed;
+        boolean anyInformative = false;
+        for (PermissionExplanation explanation : explained) {
+            if (explanation == null) {
+                continue;
+            }
+            PermissionResolver.Decision decision = explanation.decision().orElse(null);
+            anyDenied |= decision == PermissionResolver.Decision.DENIED;
+            allNotCovered &= decision == PermissionResolver.Decision.NOT_COVERED;
+            allComplete &= explanation.provenance() == PermissionExplanation.Provenance.COMPLETE;
+            anyInformative |= explanation.provenance() != PermissionExplanation.Provenance.UNAVAILABLE;
+        }
+
+        PermissionResolver.Decision decision;
+        if (allowed) {
+            decision = PermissionResolver.Decision.PERMITTED;
+        } else if (anyDenied) {
+            decision = PermissionResolver.Decision.DENIED;
+        } else if (allNotCovered) {
+            decision = PermissionResolver.Decision.NOT_COVERED;
+        } else {
+            decision = null;
+        }
+
+        PermissionExplanation.Builder builder = PermissionExplanation.builder(node, context, allowed)
+                .resolutionPolicy("ANY_SOURCE");
+        if (decision != null) {
+            builder.decision(decision)
+                    .provenance(allComplete ? PermissionExplanation.Provenance.COMPLETE
+                            : PermissionExplanation.Provenance.PARTIAL);
+        } else if (anyInformative) {
+            builder.provenance(PermissionExplanation.Provenance.PARTIAL);
+        }
+        for (int i = 0; i < sources.size(); i++) {
+            PermissionExplanation explanation = explained[i];
+            if (explanation == null) {
+                continue;
+            }
+            // nothing decides a node no source covers
+            boolean decisive = decision != null && decision != PermissionResolver.Decision.NOT_COVERED
+                    && explanation.decision().orElse(null) == decision;
+            builder.contribution(new PermissionExplanation.Contribution(sources.get(i), decisive, explanation));
+        }
+        return builder.build();
     }
 
     /**

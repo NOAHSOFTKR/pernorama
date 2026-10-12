@@ -68,3 +68,10 @@ publishing {
         }
     }
 }
+
+tasks.register('checkPathBenchmark', JavaExec) {
+    description = 'Times hasPermission on the check path; see pernorama.bench.CheckPathBenchmark.'
+    group = 'verification'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'pernorama.bench.CheckPathBenchmark'
+}

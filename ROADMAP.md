@@ -102,6 +102,12 @@ code already documents.
   `PermissionResolver` never sees a context. Context wildcards, hierarchies, compound contexts and
   conditions stay out (see **Non-goals**).
 
+- **Explaining a decision.** `PermissionSubject.explain` returns a
+  `PermissionExplanation` built by the same evaluation as
+  `hasPermission`, reporting the decisive rules, context layer and
+  sources, and saying explicitly when part of the reason is unavailable
+  rather than guessing it. `hasPermission` does no tracing.
+
 Each is documented in [README.md](README.md) and recorded in
 [CHANGELOG.md](CHANGELOG.md). What is left:
 
@@ -127,6 +133,11 @@ the `String` overload and dropping the re-validation inside `matches`
 `matches` is public and documented to throw on a bad pattern, so that
 one is a contract decision, not just an optimization. An indexed
 structure only if the numbers justify one.
+
+A first, plain harness exists: `./gradlew checkPathBenchmark` times
+`hasPermission` for a large grant set and a role-assignment subject
+(`pernorama.bench.CheckPathBenchmark` in the test sources). It is
+enough to compare two commits by hand, not a JMH suite.
 
 *Done when* a repeatable benchmark lives in the repository and any
 optimization leaves the existing semantics tests green.

@@ -1,10 +1,8 @@
 package pernorama.role;
 
-import pernorama.permission.PermissionResolver;
 import pernorama.subject.CompositePermissionSubject;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Decides whether a target is permitted a node, given the role
@@ -40,6 +38,14 @@ import java.util.Objects;
  * receives every applicable assignment, from both layers, and decides
  * for itself how they relate. The node and context passed in have
  * already been validated.
+ * <p>
+ * {@link pernorama.subject.PermissionSubject#explain(String, String) Explaining}
+ * a check through a built-in policy reports the deciding layer and the
+ * roles that decided it. A custom policy only returns its answer, so the
+ * explanation lists the applicable roles, each with its own explanation,
+ * with {@link pernorama.permission.PermissionExplanation.Provenance#PARTIAL
+ * partial} provenance — unavailable if no role could be explained —
+ * and none of them marked decisive.
  */
 @FunctionalInterface
 public interface PermissionResolutionPolicy {
@@ -53,7 +59,7 @@ public interface PermissionResolutionPolicy {
      * This is the default for {@link RoleAssignments#subject(Object)}.
      */
     PermissionResolutionPolicy ALLOW_OVERRIDES =
-            (assignments, node, context) -> layered(assignments, node, context, false);
+            (assignments, node, context) -> RoleResolution.permits(assignments, node, context, false);
 
     /**
      * Permitted if some role in the deciding layer permits the node and
@@ -65,7 +71,7 @@ public interface PermissionResolutionPolicy {
      * does not veto anything, and only a role built from rules can deny.
      */
     PermissionResolutionPolicy DENY_OVERRIDES =
-            (assignments, node, context) -> layered(assignments, node, context, true);
+            (assignments, node, context) -> RoleResolution.permits(assignments, node, context, true);
 
     /**
      * Returns whether {@code assignments}, taken together, permit
@@ -77,60 +83,4 @@ public interface PermissionResolutionPolicy {
      * @param context     the context being checked, or {@code null} for none
      */
     boolean hasPermission(List<RoleAssignment> assignments, String node, String context);
-
-    /**
-     * The context-first layering shared by the built-in policies: decides
-     * the layer of roles held in exactly {@code context} first, and the
-     * rest — the roles held without a context that apply to it — only if
-     * the first layer does not cover {@code node}.
-     */
-    private static boolean layered(
-            List<RoleAssignment> assignments, String node, String context, boolean denyOverrides) {
-        PermissionResolver.Decision decision = decideLayer(assignments, node, context, true, denyOverrides);
-        if (decision == PermissionResolver.Decision.NOT_COVERED) {
-            decision = decideLayer(assignments, node, context, false, denyOverrides);
-        }
-        return decision == PermissionResolver.Decision.PERMITTED;
-    }
-
-    /**
-     * The decision of one layer: the assignments held in {@code context}
-     * if {@code scoped}, otherwise those held without a context. An
-     * assignment held in some other context belongs to neither, even if
-     * a caller passes one in. Under {@code denyOverrides}
-     * any denial decides the layer; otherwise any permission does. A
-     * layer in which no role covers the node is
-     * {@link PermissionResolver.Decision#NOT_COVERED}.
-     */
-    private static PermissionResolver.Decision decideLayer(
-            List<RoleAssignment> assignments, String node, String context, boolean scoped, boolean denyOverrides) {
-        boolean permitted = false;
-        boolean denied = false;
-        for (RoleAssignment assignment : assignments) {
-            boolean inContext = Objects.equals(assignment.context(), context);
-            if (scoped ? !inContext : inContext || assignment.context() != null) {
-                continue;
-            }
-            switch (assignment.role().decide(node)) {
-                case PERMITTED -> {
-                    if (!denyOverrides) {
-                        return PermissionResolver.Decision.PERMITTED;
-                    }
-                    permitted = true;
-                }
-                case DENIED -> {
-                    if (denyOverrides) {
-                        return PermissionResolver.Decision.DENIED;
-                    }
-                    denied = true;
-                }
-                case NOT_COVERED -> {
-                }
-            }
-        }
-        if (permitted) {
-            return PermissionResolver.Decision.PERMITTED;
-        }
-        return denied ? PermissionResolver.Decision.DENIED : PermissionResolver.Decision.NOT_COVERED;
-    }
 }

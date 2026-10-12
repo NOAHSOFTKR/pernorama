@@ -2,6 +2,8 @@ package pernorama.permission;
 
 import pernorama.exception.InvalidPermissionException;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -184,12 +186,44 @@ public final class PermissionResolver {
      *         a valid permission node
      */
     public static Decision decide(Iterable<String> patterns, String required) {
+        return decide(patterns, required, null);
+    }
+
+    /**
+     * {@link #decide(Iterable, String)}, also reporting which rules covered
+     * {@code required} and which of them decided it. The rules carry no
+     * context, so the explanation has no context, no
+     * {@linkplain PermissionExplanation#contextPolicy() context policy} and
+     * no {@linkplain PermissionExplanation#decidingLayer() layers}; every
+     * {@linkplain PermissionExplanation#matches() match} is a
+     * {@link PermissionGrant} without a context.
+     *
+     * @throws InvalidPermissionException if any rule in {@code patterns}
+     *         is not a valid permission rule, or {@code required} is not
+     *         a valid permission node
+     */
+    public static PermissionExplanation explain(Iterable<String> patterns, String required) {
+        List<RankedGrant> covering = new ArrayList<>();
+        Decision decision = decide(patterns, required, covering);
+        return PermissionExplanation.ofRules(required, null, decision, null, covering);
+    }
+
+    /**
+     * The one evaluation behind {@link #decide(Iterable, String)} and
+     * {@link #explain(Iterable, String)}: adds every covering rule to
+     * {@code covering} unless it is {@code null}, which is the plain check.
+     */
+    private static Decision decide(Iterable<String> patterns, String required, List<RankedGrant> covering) {
         validateNode(required);
 
         int best = NOT_COVERING;
         for (String pattern : patterns) {
             validateRule(pattern);
-            best = Math.max(best, rank(pattern, required));
+            int rank = rank(pattern, required);
+            best = Math.max(best, rank);
+            if (covering != null && rank != NOT_COVERING) {
+                covering.add(new RankedGrant(new PermissionGrant(pattern, null), false, rank));
+            }
         }
         return decision(best);
     }

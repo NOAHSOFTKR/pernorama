@@ -8,12 +8,14 @@ import pernorama.exception.PermissionDeniedException;
 import pernorama.interceptor.PermissionInterceptor;
 import pernorama.permission.ContextPolicy;
 import pernorama.permission.Permission;
+import pernorama.permission.PermissionExplanation;
 import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 import pernorama.permission.PermissionRegistry;
 import pernorama.permission.PermissionResolver;
 import pernorama.role.PermissionResolutionPolicy;
 import pernorama.role.Role;
+import pernorama.role.RoleAssignment;
 import pernorama.role.RoleAssignmentDecision;
 import pernorama.role.RoleAssignmentPolicy;
 import pernorama.role.RoleAssignmentResult;
@@ -455,5 +457,55 @@ class ReadmeExamplesTest {
         PermissionSubject bob = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
         assertTrue(bob.hasPermission("students.edit", "academy:123"));
         assertFalse(bob.hasPermission("students.edit", "academy:456"));
+    }
+
+    @Test
+    void explainingADecision() {
+        Pernorama pernorama = Pernorama.builder().build();
+
+        MemoryPermissionSubject teacher = pernorama.newSubject();
+        teacher.grant("students.*");
+        teacher.grant("-students.delete", "academy:123");
+
+        PermissionExplanation edit = teacher.explain("students.edit", "academy:123");
+        assertTrue(edit.allowed());
+        assertEquals(Optional.of(PermissionResolver.Decision.PERMITTED), edit.decision());
+        assertEquals(Optional.of(PermissionExplanation.Layer.GLOBAL_FALLBACK), edit.decidingLayer());
+        assertEquals("[students.* (decisive)]", edit.matches().toString());
+
+        PermissionExplanation delete = teacher.explain("students.delete", "academy:123");
+        assertFalse(delete.allowed());
+        assertEquals(Optional.of(PermissionResolver.Decision.DENIED), delete.decision());
+        assertEquals(Optional.of(PermissionExplanation.Layer.EXACT_CONTEXT), delete.decidingLayer());
+        assertEquals("[-students.delete @ academy:123 (decisive), students.*]", delete.matches().toString());
+
+        PermissionExplanation billing = teacher.explain("billing.view");
+        assertFalse(billing.allowed());
+        assertEquals(Optional.of(PermissionResolver.Decision.NOT_COVERED), billing.decision());
+        assertEquals(List.of(), billing.matches());
+    }
+
+    @Test
+    void explainingARoleDecision() {
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        Role editor = Role.builder("editor").permission("users.*").build();
+        Role suspended = Role.builder("suspended").permission("-users.delete").build();
+        assignments.assign("bob", editor);
+        assignments.assign("bob", suspended);
+
+        PermissionExplanation why = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES)
+                .explain("users.delete");
+
+        assertEquals(Optional.of(PermissionResolver.Decision.DENIED), why.decision());
+        assertEquals(Optional.of("DENY_OVERRIDES"), why.resolutionPolicy());
+        assertEquals(List.of(new RoleAssignment(editor, null), new RoleAssignment(suspended, null)),
+                why.contributions().stream().map(PermissionExplanation.Contribution::source).toList());
+        assertEquals(List.of(false, true),
+                why.contributions().stream().map(PermissionExplanation.Contribution::decisive).toList());
+
+        PermissionExplanation allowOverrides = assignments.subject("bob").explain("users.delete");
+        assertTrue(allowOverrides.allowed());
+        assertEquals(List.of(true, false),
+                allowOverrides.contributions().stream().map(PermissionExplanation.Contribution::decisive).toList());
     }
 }
