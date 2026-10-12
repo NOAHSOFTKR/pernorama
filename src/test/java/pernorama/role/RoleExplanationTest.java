@@ -251,4 +251,28 @@ class RoleExplanationTest {
             }
         }
     }
+
+    @Test
+    void roleBackedBySubclassOverridingTheCheckAgreesWithTheCheck() {
+        MemoryPermissionSubject superUser = new MemoryPermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                return true;
+            }
+        };
+        Role root = Role.builder("root").permissions(superUser).build();
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("bob", root);
+
+        for (PermissionResolutionPolicy policy :
+                List.of(PermissionResolutionPolicy.ALLOW_OVERRIDES, PermissionResolutionPolicy.DENY_OVERRIDES)) {
+            PermissionSubject bob = assignments.subject("bob", policy);
+            PermissionExplanation explanation = bob.explain("a.b");
+
+            assertTrue(bob.hasPermission("a.b"));
+            assertTrue(explanation.allowed());
+            assertEquals(List.of(new RoleAssignment(root, null)), decisiveSources(explanation));
+            assertEquals(Provenance.PARTIAL, explanation.provenance());
+        }
+    }
 }

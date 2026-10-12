@@ -102,14 +102,40 @@ public class MemoryPermissionSubject implements PermissionSubject {
      * Explains {@link #hasPermission(String, String)} through
      * {@link ContextPolicy#explain}, with
      * {@link PermissionExplanation.Provenance#COMPLETE complete} provenance:
-     * the deciding layer and every applicable grant covering the node. A
-     * subclass that changes what {@code hasPermission} answers has to
-     * override this too, or the two disagree.
+     * the deciding layer and every applicable grant covering the node.
+     * <p>
+     * The grants only explain the answer if {@code hasPermission} is this
+     * class's own. A subclass that overrides {@code hasPermission} gets an
+     * explanation of that override's answer with
+     * {@link PermissionExplanation.Provenance#UNAVAILABLE unavailable}
+     * provenance, never the grants' answer; to report the grants when the
+     * override does not change the answer (one that only audits checks,
+     * say), override this method to return
+     * {@code contextPolicy().explain(grants(), node, context)}.
      */
     @Override
     public PermissionExplanation explain(String node, String context) {
+        if (OVERRIDES_HAS_PERMISSION.get(getClass())) {
+            return PermissionExplanation.unavailable(node, context, hasPermission(node, context));
+        }
         return contextPolicy.explain(grants, node, context);
     }
+
+    /** Whether a class overrides {@link #hasPermission(String, String)}, cached per class. */
+    private static final ClassValue<Boolean> OVERRIDES_HAS_PERMISSION = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            for (Class<?> c = type; c != MemoryPermissionSubject.class; c = c.getSuperclass()) {
+                try {
+                    c.getDeclaredMethod("hasPermission", String.class, String.class);
+                    return true;
+                } catch (NoSuchMethodException e) {
+                    // not declared here; keep looking up to MemoryPermissionSubject
+                }
+            }
+            return false;
+        }
+    };
 
     /**
      * {@link #explain(String, String)} without a context. Final for the

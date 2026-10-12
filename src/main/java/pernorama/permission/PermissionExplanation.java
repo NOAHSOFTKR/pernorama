@@ -60,7 +60,8 @@ import java.util.Optional;
  * end user whose request was denied, which would tell them exactly what
  * they lack and where it is granted.
  * <p>
- * Immutable.
+ * Immutable, except that a {@link Contribution#source()} is the live
+ * subject or assignment that was consulted, not a copy of it.
  */
 public final class PermissionExplanation {
 

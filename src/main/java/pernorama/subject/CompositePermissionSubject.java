@@ -103,7 +103,9 @@ public final class CompositePermissionSubject implements PermissionSubject {
      * source, in order, each carrying the source's own explanation, and
      * {@linkplain PermissionExplanation#resolutionPolicy() resolution policy}
      * {@code "ANY_SOURCE"}. Unlike {@code hasPermission}, every source is
-     * asked, so a source that would throw always does.
+     * asked, so a source that would throw always does. Each source's
+     * answer is its {@code hasPermission}; an explanation from it that
+     * disagrees is replaced by one reporting only that answer.
      * <p>
      * If the composite permits the node, the sources that permit it are
      * {@linkplain PermissionExplanation.Contribution#decisive() decisive}.
@@ -133,7 +135,12 @@ public final class CompositePermissionSubject implements PermissionSubject {
         boolean allComplete = true;
         boolean anyInformative = false;
         for (PermissionSubject source : sources) {
+            // the answer is hasPermission's; an explanation disagreeing with it is not used
+            boolean permitted = source.hasPermission(node, context);
             PermissionExplanation explanation = source.explain(node, context);
+            if (explanation.allowed() != permitted) {
+                explanation = PermissionExplanation.unavailable(node, context, permitted);
+            }
             explained.add(explanation);
             PermissionResolver.Decision decision = explanation.decision().orElse(null);
             allowed |= explanation.allowed();

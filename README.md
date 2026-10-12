@@ -891,13 +891,18 @@ why.contributions();    // [editor: ..., suspended (decisive): ...]
 Under `ALLOW_OVERRIDES` the same check is allowed with `editor` as the
 decisive source; `suspended`'s deny is still listed, but not as a veto.
 `CompositePermissionSubject` reports `ANY_SOURCE`, with every source
-that permits the node decisive.
+that permits the node decisive. Unlike `hasPermission`, which can stop
+at the first source or role that decides, `explain` asks every one. A
+role backed by a subject is counted only by whether it permits, so its
+own explanation may show a denial the policy does not count.
 
 **An explanation never claims a reason it cannot see.** A custom
 `PermissionSubject` that does not override `explain` gets a default
 that reports only its `hasPermission` answer, with `provenance()`
 `UNAVAILABLE` and, when denied, an empty `decision()` — it cannot tell
-`DENIED` from `NOT_COVERED`. A subject storing `PermissionGrant`s can
+`DENIED` from `NOT_COVERED`. The same goes for a `MemoryPermissionSubject`
+subclass that overrides `hasPermission`: its grants no longer explain
+the answer, so override `explain` too if they still do. A subject storing `PermissionGrant`s can
 override it with `contextPolicy.explain(grants, node, context)`, the
 counterpart of `permits`, and `PermissionResolver.explain(rules, node)`
 does the same for a plain rule set. A composite or a custom
@@ -939,8 +944,10 @@ the answer is listed.
   populated once at startup, on a single thread, before checks begin.
 - **`Pernorama`, `ContextPolicy`, `PermissionGrant`,
   `PermissionExplanation`, `PermissionNode`, `PermissionResolver`,
-  `PermissionAnnotationResolver`, `Permission`, `PermissionInterceptor`** — stateless or immutable, and
-  safe to share across threads. `PermissionAnnotationResolver` caches
+  `PermissionAnnotationResolver`, `Permission`, `PermissionInterceptor`** —
+  stateless or immutable, and safe to share across threads; a
+  `PermissionExplanation`'s contributions refer to the live sources that
+  were consulted. `PermissionAnnotationResolver` caches
   resolution in a `ConcurrentHashMap` per declaring class.
 - Any custom `PermissionSubject` implementation defines its own
   thread-safety; document it the way `MemoryPermissionSubject` does here

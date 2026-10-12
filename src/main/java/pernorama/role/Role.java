@@ -162,7 +162,10 @@ public final class Role {
      * {@link #decide(String)}'s evaluation, reporting why: for a role built
      * from rules, {@link PermissionResolver#explain(Iterable, String)} over
      * them; for a role backed by a subject, that subject's explanation of
-     * a check without a context.
+     * a check without a context. The subject is also asked
+     * {@code hasPermission}, which is what {@code decide} counts, and an
+     * explanation that disagrees with it is replaced by one reporting only
+     * that answer.
      *
      * @throws InvalidPermissionException if {@code node} is not a
      *         syntactically valid permission node
@@ -171,7 +174,11 @@ public final class Role {
         if (rules != null) {
             return PermissionResolver.explain(rules, node);
         }
-        return permissions.explain(node, null);
+        boolean permitted = permissions.hasPermission(node);
+        PermissionExplanation explanation = permissions.explain(node, null);
+        return explanation.allowed() == permitted
+                ? explanation
+                : PermissionExplanation.unavailable(node, null, permitted);
     }
 
     /**

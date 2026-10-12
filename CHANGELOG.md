@@ -36,11 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `PermissionSubject` has two new default methods, `explain(node, context)`
-  and `explain(node)`. An existing implementation keeps compiling and
-  gets an explanation that reports only its `hasPermission` answer, with
-  provenance `UNAVAILABLE`; override `explain(node, context)` to report
-  more. A `MemoryPermissionSubject` subclass that changes what
-  `hasPermission` answers should override `explain` too.
+  and `explain(node)`. An existing implementation gets an explanation
+  that reports only its `hasPermission` answer, with provenance
+  `UNAVAILABLE`; override `explain(node, context)` to report more. An
+  implementation that already declares a method named `explain` with
+  these parameters has to rename or adapt it, and
+  `MemoryPermissionSubject.explain(node)` is `final`, like its other
+  overloads without a context. A `MemoryPermissionSubject` subclass that
+  overrides `hasPermission` gets an answer-only explanation, since its
+  grants no longer explain the answer; override `explain` to report them
+  if they still do.
   `hasPermission` itself is unchanged and does no tracing.
 
 ## [0.3.0] - 2026-10-05

@@ -275,4 +275,86 @@ class PermissionExplanationTest {
         assertThrows(InvalidPermissionException.class, () -> PermissionExplanation.unavailable("users.*", null, false));
         assertThrows(IllegalArgumentException.class, () -> PermissionExplanation.unavailable("users.read", "", false));
     }
+
+    // --- subclasses that change the answer -------------------------------
+
+    /** Overrides hasPermission, so its grants no longer explain the answer. */
+    static class SuperUser extends MemoryPermissionSubject {
+        @Override
+        public boolean hasPermission(String node, String context) {
+            return true;
+        }
+    }
+
+    /** Overrides hasPermission without changing it, and explain to say so. */
+    static class AuditedUser extends MemoryPermissionSubject {
+        @Override
+        public boolean hasPermission(String node, String context) {
+            return super.hasPermission(node, context);
+        }
+
+        @Override
+        public PermissionExplanation explain(String node, String context) {
+            return contextPolicy().explain(grants(), node, context);
+        }
+    }
+
+    static class SubclassOfSuperUser extends SuperUser {
+    }
+
+    @Test
+    void subclassOverridingTheCheckGetsAnAnswerOnlyExplanation() {
+        for (MemoryPermissionSubject user : List.of(new SuperUser(), new SubclassOfSuperUser())) {
+            user.grant("-a.b");
+
+            PermissionExplanation explanation = user.explain("a.b");
+
+            assertTrue(explanation.allowed());
+            assertEquals(Provenance.UNAVAILABLE, explanation.provenance());
+            assertEquals(List.of(), explanation.matches());
+        }
+    }
+
+    @Test
+    void subclassCanStillReportItsGrants() {
+        AuditedUser user = new AuditedUser();
+        user.grant("a.*");
+
+        PermissionExplanation explanation = user.explain("a.b");
+
+        assertTrue(explanation.allowed());
+        assertEquals(Provenance.COMPLETE, explanation.provenance());
+        assertEquals(List.of(match("a.*", true)), explanation.matches());
+    }
+
+    @Test
+    void anExplanationThatDisagreesWithItsSubjectIsNotUsed() {
+        PermissionSubject inconsistent = new PermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                return true;
+            }
+
+            @Override
+            public PermissionExplanation explain(String node, String context) {
+                return PermissionExplanation.builder(node, context, false)
+                        .decision(Decision.DENIED).provenance(Provenance.COMPLETE).build();
+            }
+
+            @Override
+            public void grant(String node, String context) {
+            }
+
+            @Override
+            public void revoke(String node, String context) {
+            }
+        };
+
+        PermissionSubject composite = new pernorama.subject.CompositePermissionSubject(inconsistent);
+        PermissionExplanation explanation = composite.explain("a.b");
+
+        assertTrue(composite.hasPermission("a.b"));
+        assertTrue(explanation.allowed());
+        assertEquals(Provenance.UNAVAILABLE, explanation.contributions().get(0).explanation().provenance());
+    }
 }
