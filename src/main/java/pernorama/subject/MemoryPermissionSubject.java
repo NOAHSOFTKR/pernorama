@@ -1,6 +1,7 @@
 package pernorama.subject;
 
 import pernorama.permission.ContextPolicy;
+import pernorama.permission.PermissionExplanation;
 import pernorama.permission.PermissionGrant;
 
 import java.util.Collection;
@@ -95,6 +96,28 @@ public class MemoryPermissionSubject implements PermissionSubject {
     @Override
     public final boolean hasPermission(String node) {
         return hasPermission(node, null);
+    }
+
+    /**
+     * Explains {@link #hasPermission(String, String)} through
+     * {@link ContextPolicy#explain}, with
+     * {@link PermissionExplanation.Provenance#COMPLETE complete} provenance:
+     * the deciding layer and every applicable grant covering the node. A
+     * subclass that changes what {@code hasPermission} answers has to
+     * override this too, or the two disagree.
+     */
+    @Override
+    public PermissionExplanation explain(String node, String context) {
+        return contextPolicy.explain(grants, node, context);
+    }
+
+    /**
+     * {@link #explain(String, String)} without a context. Final for the
+     * reason given on {@link #hasPermission(String)}.
+     */
+    @Override
+    public final PermissionExplanation explain(String node) {
+        return explain(node, null);
     }
 
     @Override

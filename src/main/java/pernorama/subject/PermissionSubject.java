@@ -1,6 +1,7 @@
 package pernorama.subject;
 
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.PermissionExplanation;
 import pernorama.permission.PermissionNode;
 
 /**
@@ -60,6 +61,38 @@ public interface PermissionSubject {
     /** Convenience overload of {@link #hasPermission(String)}. */
     default boolean hasPermission(PermissionNode node) {
         return hasPermission(node.name(), null);
+    }
+
+    /**
+     * Explains {@link #hasPermission(String, String) hasPermission(node, context)}:
+     * the same answer, plus as much of the reason for it as this subject
+     * can determine. This is an opt-in diagnostic; {@code hasPermission}
+     * itself does no tracing.
+     * <p>
+     * The default only knows the answer: it calls
+     * {@code hasPermission(node, context)} and reports it with
+     * {@link PermissionExplanation.Provenance#UNAVAILABLE}, never a reason
+     * it cannot see. An implementation that stores
+     * {@link pernorama.permission.PermissionGrant}s can override it with
+     * {@link pernorama.permission.ContextPolicy#explain ContextPolicy.explain}
+     * to report the rules that decided, and must keep the answer equal to
+     * {@code hasPermission}'s.
+     * <p>
+     * An explanation describes how the subject's permissions are
+     * configured; see {@link PermissionExplanation} before showing one to
+     * the end user it is about.
+     *
+     * @throws InvalidPermissionException if {@code node} is not a
+     *         syntactically valid permission node
+     * @throws IllegalArgumentException if {@code context} is empty
+     */
+    default PermissionExplanation explain(String node, String context) {
+        return PermissionExplanation.unavailable(node, context, hasPermission(node, context));
+    }
+
+    /** {@link #explain(String, String)} without a context. */
+    default PermissionExplanation explain(String node) {
+        return explain(node, null);
     }
 
     /**

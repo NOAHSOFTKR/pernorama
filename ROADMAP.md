@@ -102,6 +102,12 @@ code already documents.
   `PermissionResolver` never sees a context. Context wildcards, hierarchies, compound contexts and
   conditions stay out (see **Non-goals**).
 
+- **Explaining a decision.** `PermissionSubject.explain` returns a
+  `PermissionExplanation` built by the same evaluation as
+  `hasPermission`, reporting the decisive rules, context layer and
+  sources, and saying explicitly when part of the reason is unavailable
+  rather than guessing it. `hasPermission` does no tracing.
+
 Each is documented in [README.md](README.md) and recorded in
 [CHANGELOG.md](CHANGELOG.md). What is left:
 

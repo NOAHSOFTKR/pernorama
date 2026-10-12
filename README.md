@@ -830,6 +830,88 @@ assignments.roles("alice", "academy:123"); // [teacher]
   compare-and-sets a list of `RoleAssignment`s — one row per target,
   role id and nullable context in a relational store.
 
+## Explaining a Decision
+
+`hasPermission` answers *whether*; `explain` answers *why*. It takes the
+same node and optional context and returns a `PermissionExplanation`
+whose `allowed()` is always what `hasPermission` returns — the two run
+the same evaluation — plus the reason, as far as the subject can tell:
+
+```java
+MemoryPermissionSubject teacher = pernorama.newSubject();
+teacher.grant("students.*");
+teacher.grant("-students.delete", "academy:123");
+
+PermissionExplanation edit = teacher.explain("students.edit", "academy:123");
+edit.allowed();       // true
+edit.decision();      // Optional[PERMITTED]
+edit.decidingLayer(); // Optional[GLOBAL_FALLBACK], nothing held in academy:123 covers it
+edit.matches();       // [students.* (decisive)]
+
+PermissionExplanation delete = teacher.explain("students.delete", "academy:123");
+delete.allowed();       // false
+delete.decision();      // Optional[DENIED]
+delete.decidingLayer(); // Optional[EXACT_CONTEXT]
+delete.matches();       // [-students.delete @ academy:123 (decisive), students.*]
+
+PermissionExplanation billing = teacher.explain("billing.view");
+billing.allowed();  // false
+billing.decision(); // Optional[NOT_COVERED], no rule covers it at all
+billing.matches();  // []
+```
+
+- **`decision()`** keeps `DENIED` (a deny rule decided) apart from
+  `NOT_COVERED` (nothing covered the node); both are `allowed() ==
+  false`.
+- **`matches()`** lists every applicable grant whose rule covers the
+  node, in precedence order — grants held in the checked context first,
+  then the more specific rule, then deny before allow — with the rule
+  that decided marked `decisive()`. Rules that lost, such as a global
+  rule a context overrides, are listed too.
+- **`decidingLayer()`** says whether the grants held in exactly the
+  checked context (`EXACT_CONTEXT`) or, under `GLOBAL_FALLBACK`, the
+  global grants (`GLOBAL_FALLBACK`) decided; `contextPolicy()` names the
+  policy.
+
+A subject that combines others reports one `Contribution` per source
+instead — each with the source and its own explanation — and names how
+they were combined in `resolutionPolicy()`. For a role-assignment
+subject the source is the `RoleAssignment`, so the role and the context
+it is held in are both there:
+
+```java
+PermissionExplanation why = assignments.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES)
+        .explain("users.delete");
+
+why.decision();         // Optional[DENIED]
+why.resolutionPolicy(); // Optional[DENY_OVERRIDES]
+why.contributions();    // [editor: ..., suspended (decisive): ...]
+```
+
+Under `ALLOW_OVERRIDES` the same check is allowed with `editor` as the
+decisive source; `suspended`'s deny is still listed, but not as a veto.
+`CompositePermissionSubject` reports `ANY_SOURCE`, with every source
+that permits the node decisive.
+
+**An explanation never claims a reason it cannot see.** A custom
+`PermissionSubject` that does not override `explain` gets a default
+that reports only its `hasPermission` answer, with `provenance()`
+`UNAVAILABLE` and, when denied, an empty `decision()` — it cannot tell
+`DENIED` from `NOT_COVERED`. A subject storing `PermissionGrant`s can
+override it with `contextPolicy.explain(grants, node, context)`, the
+counterpart of `permits`, and `PermissionResolver.explain(rules, node)`
+does the same for a plain rule set. A composite or a custom
+`PermissionResolutionPolicy` that cannot account for every source
+reports `PARTIAL`; only `COMPLETE` means every rule and source behind
+the answer is listed.
+
+`hasPermission` does no tracing; only `explain` collects the matches.
+
+> An explanation describes how a subject's permissions are configured —
+> which grants, roles and contexts it holds. Log it or show it to
+> administrators; filter it before showing it to the end user who was
+> denied.
+
 ## Thread Safety
 
 - **`MemoryPermissionSubject`** — thread-safe. `grant`, `revoke` and
@@ -855,9 +937,9 @@ assignments.roles("alice", "academy:123"); // [teacher]
   thread-safe as that subject.
 - **`PermissionRegistry`** — not thread-safe. It is meant to be
   populated once at startup, on a single thread, before checks begin.
-- **`Pernorama`, `ContextPolicy`, `PermissionGrant`, `PermissionNode`,
-  `PermissionResolver`, `PermissionAnnotationResolver`, `Permission`,
-  `PermissionInterceptor`** — stateless or immutable, and
+- **`Pernorama`, `ContextPolicy`, `PermissionGrant`,
+  `PermissionExplanation`, `PermissionNode`, `PermissionResolver`,
+  `PermissionAnnotationResolver`, `Permission`, `PermissionInterceptor`** — stateless or immutable, and
   safe to share across threads. `PermissionAnnotationResolver` caches
   resolution in a `ConcurrentHashMap` per declaring class.
 - Any custom `PermissionSubject` implementation defines its own

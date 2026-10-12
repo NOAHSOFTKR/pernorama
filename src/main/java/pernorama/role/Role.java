@@ -1,6 +1,7 @@
 package pernorama.role;
 
 import pernorama.exception.InvalidPermissionException;
+import pernorama.permission.PermissionExplanation;
 import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 import pernorama.permission.PermissionResolver;
@@ -153,6 +154,37 @@ public final class Role {
             throw new InvalidPermissionException(node);
         }
         return permissions.hasPermission(node)
+                ? PermissionResolver.Decision.PERMITTED
+                : PermissionResolver.Decision.NOT_COVERED;
+    }
+
+    /**
+     * {@link #decide(String)}'s evaluation, reporting why: for a role built
+     * from rules, {@link PermissionResolver#explain(Iterable, String)} over
+     * them; for a role backed by a subject, that subject's explanation of
+     * a check without a context.
+     *
+     * @throws InvalidPermissionException if {@code node} is not a
+     *         syntactically valid permission node
+     */
+    PermissionExplanation explain(String node) {
+        if (rules != null) {
+            return PermissionResolver.explain(rules, node);
+        }
+        return permissions.explain(node, null);
+    }
+
+    /**
+     * What {@link #decide(String)} answers, read off an explanation from
+     * {@link #explain(String)} instead of evaluating the node again. A role
+     * backed by a subject is counted only by whether it permits, as in
+     * {@code decide}.
+     */
+    PermissionResolver.Decision decide(PermissionExplanation explanation) {
+        if (rules != null) {
+            return explanation.decision().orElseThrow();
+        }
+        return explanation.allowed()
                 ? PermissionResolver.Decision.PERMITTED
                 : PermissionResolver.Decision.NOT_COVERED;
     }

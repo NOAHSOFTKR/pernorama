@@ -1,5 +1,7 @@
 package pernorama.permission;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -102,6 +104,39 @@ public enum ContextPolicy {
      * @throws IllegalArgumentException if {@code context} is empty
      */
     public boolean permits(Iterable<PermissionGrant> grants, String node, String context) {
+        return evaluate(grants, node, context, null) == PermissionResolver.Decision.PERMITTED;
+    }
+
+    /**
+     * {@link #permits(Iterable, String, String)}, also reporting why: the
+     * three-way {@linkplain PermissionExplanation#decision() decision},
+     * which {@linkplain PermissionExplanation#decidingLayer() layer}
+     * decided, and every applicable grant whose rule covers {@code node},
+     * the deciding ones marked. Its {@link PermissionExplanation#allowed()}
+     * is always what {@code permits} returns for the same arguments — both
+     * run the same evaluation.
+     * <p>
+     * This is what {@link pernorama.subject.MemoryPermissionSubject#explain}
+     * calls, and what a custom subject storing grants should call from its
+     * own {@code explain}.
+     *
+     * @throws pernorama.exception.InvalidPermissionException if {@code node} is not a
+     *         syntactically valid permission node
+     * @throws IllegalArgumentException if {@code context} is empty
+     */
+    public PermissionExplanation explain(Iterable<PermissionGrant> grants, String node, String context) {
+        List<RankedGrant> covering = new ArrayList<>();
+        PermissionResolver.Decision decision = evaluate(grants, node, context, covering);
+        return PermissionExplanation.ofRules(node, context, decision, this, covering);
+    }
+
+    /**
+     * The one evaluation behind {@link #permits} and {@link #explain}:
+     * adds every applicable grant covering {@code node} to
+     * {@code covering} unless it is {@code null}, which is the plain check.
+     */
+    private PermissionResolver.Decision evaluate(
+            Iterable<PermissionGrant> grants, String node, String context, List<RankedGrant> covering) {
         Objects.requireNonNull(grants, "grants");
         PermissionGrant.requireValidContext(context);
         PermissionResolver.validateNode(node);
@@ -112,10 +147,22 @@ public enum ContextPolicy {
         int global = PermissionResolver.NOT_COVERING;
         for (PermissionGrant grant : grants) {
             Objects.requireNonNull(grant, "grant");
+            boolean fallback;
             if (Objects.equals(grant.context(), context)) {
-                scoped = Math.max(scoped, PermissionResolver.rank(grant.rule(), node));
+                fallback = false;
             } else if (fallsBackTo(grant.context())) {
-                global = Math.max(global, PermissionResolver.rank(grant.rule(), node));
+                fallback = true;
+            } else {
+                continue;
+            }
+            int rank = PermissionResolver.rank(grant.rule(), node);
+            if (fallback) {
+                global = Math.max(global, rank);
+            } else {
+                scoped = Math.max(scoped, rank);
+            }
+            if (covering != null && rank != PermissionResolver.NOT_COVERING) {
+                covering.add(new RankedGrant(grant, fallback, rank));
             }
         }
 
@@ -123,7 +170,7 @@ public enum ContextPolicy {
         if (decision == PermissionResolver.Decision.NOT_COVERED) {
             decision = PermissionResolver.decision(global);
         }
-        return decision == PermissionResolver.Decision.PERMITTED;
+        return decision;
     }
 
     /**

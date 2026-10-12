@@ -2,6 +2,7 @@ package pernorama.role;
 
 import pernorama.exception.InvalidPermissionException;
 import pernorama.permission.ContextPolicy;
+import pernorama.permission.PermissionExplanation;
 import pernorama.permission.PermissionGrant;
 import pernorama.permission.PermissionNode;
 import pernorama.subject.PermissionSubject;
@@ -367,6 +368,25 @@ public final class RoleAssignments<K> {
 
         @Override
         public boolean hasPermission(String node, String context) {
+            return policy.hasPermission(applicable(node, context), node, context);
+        }
+
+        /**
+         * Explains {@link #hasPermission(String, String)}: one
+         * {@linkplain PermissionExplanation#contributions() contribution}
+         * per applicable assignment, with the role's own explanation. For a
+         * built-in policy the decision, the deciding layer and the decisive
+         * roles are reported; a custom policy is reported with
+         * {@link PermissionExplanation.Provenance#PARTIAL partial}
+         * provenance, since how it combined the roles is not known.
+         */
+        @Override
+        public PermissionExplanation explain(String node, String context) {
+            return RoleResolution.explain(applicable(node, context), node, context, policy, assignments.contextPolicy);
+        }
+
+        /** Validates the check and returns the target's assignments that apply to it. */
+        private List<RoleAssignment> applicable(String node, String context) {
             if (!PermissionNode.isValid(node)) {
                 throw new InvalidPermissionException(node);
             }
@@ -377,7 +397,7 @@ public final class RoleAssignments<K> {
                     applicable.add(assignment);
                 }
             }
-            return policy.hasPermission(Collections.unmodifiableList(applicable), node, context);
+            return Collections.unmodifiableList(applicable);
         }
 
         @Override
