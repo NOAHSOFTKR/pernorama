@@ -13,9 +13,11 @@ import pernorama.subject.PermissionSubject;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoleExplanationTest {
@@ -274,5 +276,108 @@ class RoleExplanationTest {
             assertEquals(List.of(new RoleAssignment(root, null)), decisiveSources(explanation));
             assertEquals(Provenance.PARTIAL, explanation.provenance());
         }
+    }
+
+    private static Role throwingRole(String id, AtomicInteger calls) {
+        return Role.builder(id).permissions(new PermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                calls.incrementAndGet();
+                throw new IllegalStateException("role source unavailable");
+            }
+
+            @Override
+            public void grant(String node, String context) {
+            }
+
+            @Override
+            public void revoke(String node, String context) {
+            }
+        }).build();
+    }
+
+    @Test
+    void explainSurvivesARoleTheCheckNeverReaches() {
+        AtomicInteger calls = new AtomicInteger();
+        Role remote = throwingRole("remote", calls);
+        Role editor = role("editor", "a.*");
+        Role suspended = role("suspended", "-a.b");
+
+        RoleAssignments<String> allow = new RoleAssignments<>();
+        allow.assign("bob", editor);
+        allow.assign("bob", remote);
+        PermissionSubject allowBob = allow.subject("bob");
+        assertTrue(allowBob.hasPermission("a.b"));
+        PermissionExplanation allowed = allowBob.explain("a.b");
+        assertTrue(allowed.allowed());
+        assertEquals(Provenance.PARTIAL, allowed.provenance());
+        assertEquals(List.of(new RoleAssignment(editor, null)), decisiveSources(allowed));
+        assertEquals(1, allowed.contributions().size());
+
+        RoleAssignments<String> deny = new RoleAssignments<>();
+        deny.assign("bob", suspended);
+        deny.assign("bob", remote);
+        PermissionSubject denyBob = deny.subject("bob", PermissionResolutionPolicy.DENY_OVERRIDES);
+        assertFalse(denyBob.hasPermission("a.b"));
+        PermissionExplanation denied = denyBob.explain("a.b");
+        assertEquals(Optional.of(Decision.DENIED), denied.decision());
+        assertEquals(Provenance.PARTIAL, denied.provenance());
+        assertEquals(List.of(new RoleAssignment(suspended, null)), decisiveSources(denied));
+    }
+
+    @Test
+    void explainPropagatesARoleFailureTheCheckWouldHit() {
+        Role remote = throwingRole("remote", new AtomicInteger());
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("bob", remote);
+        assignments.assign("bob", role("editor", "a.*"));
+
+        for (PermissionResolutionPolicy policy :
+                List.of(PermissionResolutionPolicy.ALLOW_OVERRIDES, PermissionResolutionPolicy.DENY_OVERRIDES)) {
+            PermissionSubject bob = assignments.subject("bob", policy);
+            assertThrows(IllegalStateException.class, () -> bob.hasPermission("a.b"));
+            assertThrows(IllegalStateException.class, () -> bob.explain("a.b"));
+        }
+    }
+
+    @Test
+    void customPolicyIsAskedBeforeRolesItDoesNotUse() {
+        AtomicInteger calls = new AtomicInteger();
+        Role remote = throwingRole("remote", calls);
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("bob", remote);
+        PermissionResolutionPolicy nobody = (held, node, context) -> false;
+
+        PermissionExplanation explanation = assignments.subject("bob", nobody).explain("a.b");
+
+        assertFalse(explanation.allowed());
+        assertEquals(Provenance.UNAVAILABLE, explanation.provenance());
+        assertEquals(List.of(), explanation.contributions());
+        assertEquals(1, calls.get()); // observed once, after the policy answered
+    }
+
+    @Test
+    void roleBackedBySubjectIsAskedOnce() {
+        AtomicInteger calls = new AtomicInteger();
+        Role counted = Role.builder("counted").permissions(new PermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                calls.incrementAndGet();
+                return true;
+            }
+
+            @Override
+            public void grant(String node, String context) {
+            }
+
+            @Override
+            public void revoke(String node, String context) {
+            }
+        }).build();
+        RoleAssignments<String> assignments = new RoleAssignments<>();
+        assignments.assign("bob", counted);
+
+        assertTrue(assignments.subject("bob").explain("a.b").allowed());
+        assertEquals(1, calls.get());
     }
 }

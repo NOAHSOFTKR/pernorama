@@ -134,6 +134,11 @@ the `String` overload and dropping the re-validation inside `matches`
 one is a contract decision, not just an optimization. An indexed
 structure only if the numbers justify one.
 
+A first, plain harness exists: `./gradlew checkPathBenchmark` times
+`hasPermission` for a large grant set and a role-assignment subject
+(`pernorama.bench.CheckPathBenchmark` in the test sources). It is
+enough to compare two commits by hand, not a JMH suite.
+
 *Done when* a repeatable benchmark lives in the repository and any
 optimization leaves the existing semantics tests green.
 

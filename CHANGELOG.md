@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `permits` and `decide`, and run the same evaluation; a custom subject
   can return them from its own `explain`. `PermissionExplanation.builder`
   lets a custom subject or policy report what it knows.
+  `explain` consults the sources and roles a check would, in the same
+  order, and asks each source once; ones a check would not reach are
+  only observed, and one of those that throws is left out with
+  provenance `PARTIAL` instead of failing the explanation.
+- `./gradlew checkPathBenchmark`, a plain timing harness for the
+  `hasPermission` check path, for comparing commits.
 
 ### Changed
 

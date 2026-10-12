@@ -891,10 +891,18 @@ why.contributions();    // [editor: ..., suspended (decisive): ...]
 Under `ALLOW_OVERRIDES` the same check is allowed with `editor` as the
 decisive source; `suspended`'s deny is still listed, but not as a veto.
 `CompositePermissionSubject` reports `ANY_SOURCE`, with every source
-that permits the node decisive. Unlike `hasPermission`, which can stop
-at the first source or role that decides, `explain` asks every one. A
-role backed by a subject is counted only by whether it permits, so its
-own explanation may show a denial the policy does not count.
+that permits the node decisive. A role backed by a subject is counted
+only by whether it permits, so its own explanation may show a denial
+the policy does not count.
+
+`explain` consults the sources and roles that `hasPermission` would, in
+the same order, so an exception from one of them surfaces exactly as it
+would from the check. The ones a check would not reach — after the
+first permitting source, say — cannot change the answer and are
+explained only to be reported: one that throws is left out of
+`contributions()`, and the provenance becomes `PARTIAL`. Each source is
+asked once, through its own `explain`, so one backed by a database is
+queried once per explanation.
 
 **An explanation never claims a reason it cannot see.** A custom
 `PermissionSubject` that does not override `explain` gets a default

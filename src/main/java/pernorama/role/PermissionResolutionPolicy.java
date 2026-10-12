@@ -44,8 +44,8 @@ import java.util.List;
  * roles that decided it. A custom policy only returns its answer, so the
  * explanation lists the applicable roles, each with its own explanation,
  * with {@link pernorama.permission.PermissionExplanation.Provenance#PARTIAL
- * partial} provenance — unavailable if no role applies — and none of
- * them marked decisive.
+ * partial} provenance — unavailable if no role could be explained —
+ * and none of them marked decisive.
  */
 @FunctionalInterface
 public interface PermissionResolutionPolicy {

@@ -8,6 +8,7 @@ import pernorama.permission.PermissionResolver;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -203,5 +204,69 @@ class CompositePermissionSubjectTest {
 
         assertThrows(InvalidPermissionException.class, () -> user.explain("users.*"));
         assertThrows(IllegalArgumentException.class, () -> user.explain("users.read", ""));
+    }
+
+    private static PermissionSubject throwing() {
+        return new PermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                throw new IllegalStateException("source unavailable");
+            }
+
+            @Override
+            public void grant(String node, String context) {
+            }
+
+            @Override
+            public void revoke(String node, String context) {
+            }
+        };
+    }
+
+    @Test
+    void explainSurvivesASourceTheCheckNeverReaches() {
+        PermissionSubject permitting = new MemoryPermissionSubject(List.of("a.*"));
+        PermissionSubject user = new CompositePermissionSubject(permitting, throwing());
+
+        assertTrue(user.hasPermission("a.b"));
+        PermissionExplanation explanation = user.explain("a.b");
+
+        assertTrue(explanation.allowed());
+        assertEquals(PermissionExplanation.Provenance.PARTIAL, explanation.provenance());
+        assertEquals(List.of(permitting),
+                explanation.contributions().stream().map(PermissionExplanation.Contribution::source).toList());
+    }
+
+    @Test
+    void explainPropagatesAFailureTheCheckWouldHit() {
+        PermissionSubject user = new CompositePermissionSubject(
+                new MemoryPermissionSubject(List.of("posts.read")), throwing(), opaque(true));
+
+        assertThrows(IllegalStateException.class, () -> user.hasPermission("a.b"));
+        assertThrows(IllegalStateException.class, () -> user.explain("a.b"));
+    }
+
+    @Test
+    void explainAsksEachSourceOnce() {
+        AtomicInteger calls = new AtomicInteger();
+        PermissionSubject counted = new PermissionSubject() {
+            @Override
+            public boolean hasPermission(String node, String context) {
+                calls.incrementAndGet();
+                return false;
+            }
+
+            @Override
+            public void grant(String node, String context) {
+            }
+
+            @Override
+            public void revoke(String node, String context) {
+            }
+        };
+
+        new CompositePermissionSubject(counted).explain("a.b");
+
+        assertEquals(1, calls.get());
     }
 }

@@ -76,7 +76,9 @@ public interface PermissionSubject {
      * {@link pernorama.permission.PermissionGrant}s can override it with
      * {@link pernorama.permission.ContextPolicy#explain ContextPolicy.explain}
      * to report the rules that decided, and must keep the answer equal to
-     * {@code hasPermission}'s.
+     * {@code hasPermission}'s: a {@link CompositePermissionSubject} or a
+     * role backed by this subject asks only {@code explain}, so that a
+     * source backed by a database or a remote service is queried once.
      * <p>
      * An explanation describes how the subject's permissions are
      * configured; see {@link PermissionExplanation} before showing one to

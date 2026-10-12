@@ -326,35 +326,4 @@ class PermissionExplanationTest {
         assertEquals(Provenance.COMPLETE, explanation.provenance());
         assertEquals(List.of(match("a.*", true)), explanation.matches());
     }
-
-    @Test
-    void anExplanationThatDisagreesWithItsSubjectIsNotUsed() {
-        PermissionSubject inconsistent = new PermissionSubject() {
-            @Override
-            public boolean hasPermission(String node, String context) {
-                return true;
-            }
-
-            @Override
-            public PermissionExplanation explain(String node, String context) {
-                return PermissionExplanation.builder(node, context, false)
-                        .decision(Decision.DENIED).provenance(Provenance.COMPLETE).build();
-            }
-
-            @Override
-            public void grant(String node, String context) {
-            }
-
-            @Override
-            public void revoke(String node, String context) {
-            }
-        };
-
-        PermissionSubject composite = new pernorama.subject.CompositePermissionSubject(inconsistent);
-        PermissionExplanation explanation = composite.explain("a.b");
-
-        assertTrue(composite.hasPermission("a.b"));
-        assertTrue(explanation.allowed());
-        assertEquals(Provenance.UNAVAILABLE, explanation.contributions().get(0).explanation().provenance());
-    }
 }

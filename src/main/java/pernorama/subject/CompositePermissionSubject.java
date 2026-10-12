@@ -102,10 +102,16 @@ public final class CompositePermissionSubject implements PermissionSubject {
      * {@linkplain PermissionExplanation#contributions() contribution} per
      * source, in order, each carrying the source's own explanation, and
      * {@linkplain PermissionExplanation#resolutionPolicy() resolution policy}
-     * {@code "ANY_SOURCE"}. Unlike {@code hasPermission}, every source is
-     * asked, so a source that would throw always does. Each source's
-     * answer is its {@code hasPermission}; an explanation from it that
-     * disagrees is replaced by one reporting only that answer.
+     * {@code "ANY_SOURCE"}. Each source is asked once, through its own
+     * {@code explain}, whose answer is its {@code hasPermission} answer.
+     * <p>
+     * The sources {@code hasPermission} would consult — every one up to the
+     * first that permits — are consulted in the same order, and an
+     * exception from one of them propagates, as it would from the check.
+     * The sources after the first that permits cannot change the answer
+     * and are explained only to be reported: one that throws is left out
+     * of the contributions, and the provenance is then at most
+     * {@link PermissionExplanation.Provenance#PARTIAL}.
      * <p>
      * If the composite permits the node, the sources that permit it are
      * {@linkplain PermissionExplanation.Contribution#decisive() decisive}.
@@ -128,22 +134,34 @@ public final class CompositePermissionSubject implements PermissionSubject {
         }
         PermissionGrant.requireValidContext(context);
 
-        List<PermissionExplanation> explained = new ArrayList<>(sources.size());
+        // Ask the sources hasPermission would ask, in its order, letting an
+        // exception propagate as it would there; once one permits, the rest
+        // are only observed, and one that throws is left out.
+        PermissionExplanation[] explained = new PermissionExplanation[sources.size()];
         boolean allowed = false;
+        boolean anyFailed = false;
+        for (int i = 0; i < sources.size(); i++) {
+            if (!allowed) {
+                explained[i] = sources.get(i).explain(node, context);
+                allowed = explained[i].allowed();
+            } else {
+                try {
+                    explained[i] = sources.get(i).explain(node, context);
+                } catch (RuntimeException e) {
+                    anyFailed = true;
+                }
+            }
+        }
+
         boolean anyDenied = false;
         boolean allNotCovered = true;
-        boolean allComplete = true;
+        boolean allComplete = !anyFailed;
         boolean anyInformative = false;
-        for (PermissionSubject source : sources) {
-            // the answer is hasPermission's; an explanation disagreeing with it is not used
-            boolean permitted = source.hasPermission(node, context);
-            PermissionExplanation explanation = source.explain(node, context);
-            if (explanation.allowed() != permitted) {
-                explanation = PermissionExplanation.unavailable(node, context, permitted);
+        for (PermissionExplanation explanation : explained) {
+            if (explanation == null) {
+                continue;
             }
-            explained.add(explanation);
             PermissionResolver.Decision decision = explanation.decision().orElse(null);
-            allowed |= explanation.allowed();
             anyDenied |= decision == PermissionResolver.Decision.DENIED;
             allNotCovered &= decision == PermissionResolver.Decision.NOT_COVERED;
             allComplete &= explanation.provenance() == PermissionExplanation.Provenance.COMPLETE;
@@ -171,7 +189,10 @@ public final class CompositePermissionSubject implements PermissionSubject {
             builder.provenance(PermissionExplanation.Provenance.PARTIAL);
         }
         for (int i = 0; i < sources.size(); i++) {
-            PermissionExplanation explanation = explained.get(i);
+            PermissionExplanation explanation = explained[i];
+            if (explanation == null) {
+                continue;
+            }
             // nothing decides a node no source covers
             boolean decisive = decision != null && decision != PermissionResolver.Decision.NOT_COVERED
                     && explanation.decision().orElse(null) == decision;

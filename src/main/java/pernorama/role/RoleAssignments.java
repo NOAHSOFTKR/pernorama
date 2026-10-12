@@ -378,14 +378,18 @@ public final class RoleAssignments<K> {
          * built-in policy the decision, the deciding layer and the decisive
          * roles are reported; a custom policy is reported with
          * {@link PermissionExplanation.Provenance#PARTIAL partial}
-         * provenance, since how it combined the roles is not known, and is
-         * asked for its answer separately from the roles' explanations.
+         * provenance, since how it combined the roles is not known.
          * <p>
-         * Unlike {@code hasPermission}, which can stop at the first role
-         * that decides, every applicable role is asked, so a role that
-         * would throw always does. A role backed by a subject is counted
-         * only by whether it permits, as in a check: its own explanation
-         * may show a denial that the policy does not count.
+         * The roles a check consults are consulted the same way and in the
+         * same order, so an exception from one of them propagates exactly
+         * as it would from {@code hasPermission}. The roles a check would
+         * not reach cannot change the answer and are explained only to be
+         * reported: one that throws is left out and the provenance becomes
+         * {@link PermissionExplanation.Provenance#PARTIAL partial}. Each
+         * role is asked once; a role backed by a subject through that
+         * subject's {@code explain}. It is counted only by whether it
+         * permits, as in a check, so its own explanation may show a denial
+         * the policy does not count.
          */
         @Override
         public PermissionExplanation explain(String node, String context) {
