@@ -41,3 +41,21 @@ export {
 } from './role/role-assignment-store.js';
 export { AsyncRoleAssignments, RoleAssignments } from './role/role-assignments.js';
 export { RoleGroup, RoleGroupBuilder } from './role/role-group.js';
+
+export {
+  type AsyncContextResolver,
+  type AsyncPermissionDecoratorOptions,
+  type AsyncPermissionDecorators,
+  type AsyncPermOptions,
+  type AsyncSubjectResolver,
+  type ContextResolver,
+  createAsyncPermissionDecorators,
+  createPermissionDecorators,
+  type PermDecorator,
+  type PermGroupDecorator,
+  type PermInvocation,
+  type PermissionDecoratorOptions,
+  type PermissionDecorators,
+  type PermOptions,
+} from './decorator/decorators.js';
+export { PermissionAnnotationResolver, PermissionRegistry } from './decorator/permission-registry.js';
