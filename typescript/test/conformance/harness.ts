@@ -19,6 +19,7 @@ import {
   PermissionDeniedException,
   type PermissionExplanation,
   type PermissionSubject,
+  RoleAssignment,
   UnsupportedOperationError,
 } from '../../src/index.js';
 
@@ -107,6 +108,9 @@ function canonical(explanation: PermissionExplanation, labels: Labels): Json {
 }
 
 function sourceLabel(source: object, labels: Labels): Json {
+  if (source instanceof RoleAssignment) {
+    return { role: source.role.id, context: source.context };
+  }
   const label = labels.get(source);
   assert.ok(label !== undefined, 'a contribution names a source the fixture did not label');
   return { subject: label };

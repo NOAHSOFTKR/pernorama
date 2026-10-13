@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { MemoryPermissionSubject, PermissionGrant, PermissionNode, PermissionResolver } from '../../src/index.js';
+import { MemoryPermissionSubject, PermissionGrant, PermissionNode, PermissionResolver, Role } from '../../src/index.js';
 import { assertExplanation, assertFails, expectKeys, load } from './harness.js';
 
 describe('spec/permission-cases.json', () => {
@@ -35,10 +35,12 @@ describe('spec/permission-cases.json', () => {
         new PermissionGrant(value, null);
         subject.grant(value);
         subject.revoke(value);
+        Role.builder('r').permission(value).build();
       } else {
         assertFails('INVALID_PERMISSION', `new PermissionGrant(${what})`, () => new PermissionGrant(value, null));
         assertFails('INVALID_PERMISSION', `grant(${what})`, () => subject.grant(value));
         assertFails('INVALID_PERMISSION', `revoke(${what})`, () => subject.revoke(value));
+        assertFails('INVALID_PERMISSION', `Role.permission(${what})`, () => Role.builder('r').permission(value));
       }
     }
   });
@@ -88,6 +90,15 @@ describe('spec/permission-cases.json', () => {
           assert.equal(PermissionResolver.decide(set.rules, check.node), check.decision, `${what}: decide`);
           assert.equal(PermissionResolver.matchesAny(set.rules, check.node), allowed, `${what}: matchesAny`);
           assertExplanation(PermissionResolver.explain(set.rules, check.node), check, allowed, new Map(), what);
+
+          // a role built from the same rules decides the same way
+          const builder = Role.builder('r');
+          for (const rule of set.rules) {
+            builder.permission(rule);
+          }
+          const role = builder.build();
+          assert.equal(role.permissions.hasPermission(check.node), allowed, `${what}: role permits`);
+          assert.equal(role.denies(check.node), check.decision === 'DENIED', `${what}: role denies`);
         }
       });
     }

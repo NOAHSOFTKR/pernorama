@@ -29,3 +29,15 @@ export { PermissionResolver } from './permission/permission-resolver.js';
 export { CompositePermissionSubject } from './subject/composite-permission-subject.js';
 export { MemoryPermissionSubject } from './subject/memory-permission-subject.js';
 export { isPermissionSubject, type PermissionSubject } from './subject/permission-subject.js';
+
+export { PermissionResolutionPolicy } from './role/permission-resolution-policy.js';
+export { Role, RoleBuilder } from './role/role.js';
+export { RoleAssignment, RoleAssignmentResult, RoleAssignmentStatus } from './role/role-assignment.js';
+export { RoleAssignmentDecision, RoleAssignmentPolicy } from './role/role-assignment-policy.js';
+export {
+  type AsyncRoleAssignmentStore,
+  MemoryRoleAssignmentStore,
+  type RoleAssignmentStore,
+} from './role/role-assignment-store.js';
+export { AsyncRoleAssignments, RoleAssignments } from './role/role-assignments.js';
+export { RoleGroup, RoleGroupBuilder } from './role/role-group.js';

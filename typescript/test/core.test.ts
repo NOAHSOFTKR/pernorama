@@ -336,6 +336,7 @@ describe('ContextPolicy and Pernorama', () => {
     const exact = Pernorama.create({ contextPolicy: ContextPolicy.EXACT });
     assert.equal(exact.newSubject().contextPolicy, ContextPolicy.EXACT);
     assert.equal(exact.newSubject(['a.b']).hasPermission('a.b', 'ctx'), false);
+    assert.equal(exact.newRoleAssignments<string>().contextPolicy, ContextPolicy.EXACT);
     assert.equal(String(exact), 'Pernorama[contextPolicy=EXACT]');
     assert.throws(() => Pernorama.builder().contextPolicy('EXACT' as never), IllegalArgumentError);
   });

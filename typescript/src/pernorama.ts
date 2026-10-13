@@ -1,5 +1,11 @@
 import { IllegalArgumentError } from './error/errors.js';
 import { ContextPolicy } from './permission/context-policy.js';
+import {
+  type AsyncRoleAssignmentStore,
+  MemoryRoleAssignmentStore,
+  type RoleAssignmentStore,
+} from './role/role-assignment-store.js';
+import { AsyncRoleAssignments, RoleAssignments } from './role/role-assignments.js';
 import { MemoryPermissionSubject } from './subject/memory-permission-subject.js';
 
 /** The settings of a {@link Pernorama} instance. */
@@ -21,6 +27,7 @@ export interface PernoramaOptions {
  *   .build();
  *
  * const user = pernorama.newSubject();
+ * const assignments = pernorama.newRoleAssignments<string>();
  * ```
  *
  * Today the only setting is the {@link ContextPolicy}, which decides
@@ -69,6 +76,26 @@ export class Pernorama {
    */
   newSubject(initialPermissions?: Iterable<string>): MemoryPermissionSubject {
     return new MemoryPermissionSubject(this.contextPolicy, initialPermissions);
+  }
+
+  /**
+   * New role assignments kept in `store` — by default a new
+   * {@link MemoryRoleAssignmentStore} — using this instance's settings.
+   *
+   * @typeParam K how a target is identified, e.g. a user id
+   */
+  newRoleAssignments<K>(store: RoleAssignmentStore<K> = new MemoryRoleAssignmentStore<K>()): RoleAssignments<K> {
+    return new RoleAssignments(store, this.contextPolicy);
+  }
+
+  /**
+   * New role assignments kept in a store that answers asynchronously,
+   * using this instance's settings.
+   *
+   * @typeParam K how a target is identified, e.g. a user id
+   */
+  newAsyncRoleAssignments<K>(store: AsyncRoleAssignmentStore<K>): AsyncRoleAssignments<K> {
+    return new AsyncRoleAssignments(store, this.contextPolicy);
   }
 
   toString(): string {
