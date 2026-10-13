@@ -1,0 +1,64 @@
+name: Publish (npm)
+
+# The TypeScript SDK is released on its own tags, `ts-v<version>`, which the
+# Java workflow (publish.yml, tags `v*`) does not match: one tag never
+# triggers both publishers.
+#
+# Publishing uses npm Trusted Publishing (OIDC): there is no npm token in
+# this repository or its secrets. It stays a dry run until a maintainer
+#   1. configures this repository and this workflow file as a trusted
+#      publisher for the package on npmjs.com, and
+#   2. sets the repository variable NPM_TRUSTED_PUBLISHING to "true".
+# See typescript/README.md, "Releasing".
+
+on:
+  push:
+    tags:
+      - 'ts-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # OIDC, for Trusted Publishing and provenance
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: The tag has to name the version in package.json
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "ts-v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version (expected ts-v$version)"
+            exit 1
+          fi
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck, test, build, validate the package, smoke-test consumers
+        run: npm run verify
+
+      - name: Publish (dry run)
+        if: vars.NPM_TRUSTED_PUBLISHING != 'true'
+        run: |
+          npm publish --dry-run --access public --ignore-scripts
+          echo "::notice::Dry run only. Set the repository variable NPM_TRUSTED_PUBLISHING=true once npm Trusted Publishing is configured."
+
+      - name: Publish
+        if: vars.NPM_TRUSTED_PUBLISHING == 'true'
+        run: npm publish --access public --provenance --ignore-scripts

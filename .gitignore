@@ -5,3 +5,7 @@ out/
 .idea/
 *.iml
 .vscode/
+
+# never commit registry credentials
+.npmrc
+.npmtoken
