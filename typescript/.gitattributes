@@ -1,0 +1,2 @@
+# Fixtures and sources are byte-identical on every platform, so builds are reproducible.
+* text=auto eol=lf
