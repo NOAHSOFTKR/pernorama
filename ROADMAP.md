@@ -39,6 +39,11 @@ The library depends on the JDK only, targets Java 21+, is tested on
 pushes to `main` and on pull requests, and is published to
 `maven.noahsoft.kr` from a `v*` tag.
 
+Next to it, [`typescript/`](typescript/README.md) holds a TypeScript
+SDK with the same rules, and [`spec/`](spec/README.md) holds the
+language-neutral fixtures both implementations are tested against; see
+[TypeScript SDK](#typescript-sdk) below.
+
 ## Principles
 
 Every item below is judged against these; an item that violates one
@@ -203,6 +208,60 @@ by a feature list. It ships when the items above are done and:
 - **CI covers more than one JDK**, so a break on a newer release is
   caught before a user reports it.
 
+## TypeScript SDK
+
+`@noahsoft/pernorama` (in `typescript/`) is a second implementation of
+the same model, for Node.js services. It has its own version line,
+starting at `0.1.0`, its own changelog, and its own release tag
+(`ts-v*`); a Java release does not imply a TypeScript one or the other
+way round. The principles above apply to it unchanged, with "the JDK
+only" read as "no runtime dependencies".
+
+**Supported today** (unreleased): nodes, rules and deny precedence;
+contexts and both context policies; in-memory and composite subjects;
+roles, role groups, assignments and both resolution policies;
+explanations; `@Perm`/`@PermGroup` as standard decorators with an
+explicit subject and context strategy; an asynchronous role-assignment
+store for databases. ESM with type declarations; usable from CommonJS.
+
+**How the two stay the same.** Java is the reference. A behavior that
+matters is written as a case in `spec/` and both test suites run the
+same files; a change to an authorization rule lands in Java and in
+`spec/` first. A difference that cannot be removed is documented as a
+compatibility note in the TypeScript README, never resolved by changing
+a Java rule to fit.
+
+**Before the first npm release:**
+
+- **Confirm the package name.** `@noahsoft/pernorama` is provisional
+  until a maintainer has verified that NOAHSOFT controls the `noahsoft`
+  scope on npm.
+- **Turn on publishing.** `publish-npm.yml` uses npm Trusted Publishing
+  and only performs a dry run until a trusted publisher is configured
+  for the package and the `NPM_TRUSTED_PUBLISHING` repository variable
+  is set. No npm token is to be stored anywhere.
+
+**Still open before a TypeScript 1.0:**
+
+- Freezing the exported API, with a mechanical guard in CI (an API
+  report that fails on an unreviewed change).
+- Running the decorator tests against compilers other than TypeScript's
+  own emit (esbuild, SWC, Babel), and against native decorators once a
+  runtime ships them.
+- Deciding whether `PermissionRegistry` should also be populated at
+  build time, for documentation generation.
+
+**Planned as separate packages, not in the core:** an HTTP-framework
+integration that resolves the subject from a request, a Discord-member
+subject, a JWT-claim subject, and persistence adapters implementing
+`PermissionSubject` and `AsyncRoleAssignmentStore`. None of these exist
+yet.
+
+**Not planned:** a port of the reflective `PermissionInterceptor`
+(decorators and `Permission.require` cover its job), implicit
+"current user" state of any kind, and everything under
+[Non-goals](#non-goals).
+
 ## After 1.0 — optional modules
 
 The README already names Spring Security, Discord, JWT, OAuth2, a SQL
@@ -238,7 +297,8 @@ done, so nothing above blocks them.
   beyond an opaque context string: key-value context sets, context
   wildcards or hierarchies, and validating that a context exists.
 - **Dependencies in the core**, including for scanning, logging or
-  JSON.
+  JSON. (The conformance test reads its fixtures with a JSON library;
+  that is a test dependency, and stays one.)
 
 ## Changing this roadmap
 

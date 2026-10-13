@@ -38,6 +38,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provenance `PARTIAL` instead of failing the explanation.
 - `./gradlew checkPathBenchmark`, a plain timing harness for the
   `hasPermission` check path, for comparing commits.
+- **A TypeScript SDK**, `@noahsoft/pernorama`, in `typescript/`
+  ([#18](https://github.com/NOAHSOFTKR/pernorama/issues/18)): the same
+  nodes, rules, contexts, subjects, roles and explanations for Node.js
+  services. It is versioned and released separately from this artifact —
+  on `ts-v*` tags, never on `v*` — and has its own
+  [changelog](typescript/CHANGELOG.md). Nothing is published to npm yet.
+- **Shared conformance fixtures** in `spec/`: language-neutral JSON
+  cases for node and rule syntax, wildcard matching, deny precedence,
+  context resolution, composite subjects, role assignments and
+  explanations. `pernorama.conformance.ConformanceTest` runs them
+  against this implementation and the TypeScript suite runs the same
+  files, so a rule set cannot come to mean different things in the two
+  languages. The format is described in `spec/README.md`.
+
+  No Java authorization rule and no public Java API changed for either:
+  the only changes to this build are the new test, a test-only
+  `jackson-databind` dependency to read the fixtures (the library itself
+  still depends on the JDK only), and `spec/` as an input of the `test`
+  task.
+- CI runs the TypeScript package on Node.js 22 and 24 (typecheck, tests,
+  build, package validation, and installing the tarball into ESM,
+  CommonJS and TypeScript consumers), and a `conformance` job that runs
+  the fixtures in both languages from one checkout.
 
 ### Changed
 
