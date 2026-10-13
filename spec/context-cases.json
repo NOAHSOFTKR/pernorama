@@ -1,0 +1,348 @@
+{
+  "specVersion": 1,
+  "description": "Contexts: validity, which grants a ContextPolicy applies, and how a subject holding grants answers and explains a check. See spec/README.md for the format.",
+
+  "contexts": [
+    { "value": null, "valid": true },
+    { "value": "academy:123", "valid": true },
+    { "value": "academy:*", "valid": true },
+    { "value": "*", "valid": true },
+    { "value": " ", "valid": true },
+    { "value": "", "valid": false }
+  ],
+
+  "applies": [
+    { "policy": "GLOBAL_FALLBACK", "granted": null, "requested": null, "applies": true },
+    { "policy": "GLOBAL_FALLBACK", "granted": null, "requested": "a", "applies": true },
+    { "policy": "GLOBAL_FALLBACK", "granted": "a", "requested": "a", "applies": true },
+    { "policy": "GLOBAL_FALLBACK", "granted": "a", "requested": "b", "applies": false },
+    { "policy": "GLOBAL_FALLBACK", "granted": "a", "requested": null, "applies": false },
+    { "policy": "GLOBAL_FALLBACK", "granted": "a", "requested": "A", "applies": false },
+    { "policy": "EXACT", "granted": null, "requested": null, "applies": true },
+    { "policy": "EXACT", "granted": null, "requested": "a", "applies": false },
+    { "policy": "EXACT", "granted": "a", "requested": "a", "applies": true },
+    { "policy": "EXACT", "granted": "a", "requested": "b", "applies": false },
+    { "policy": "EXACT", "granted": "a", "requested": null, "applies": false },
+    { "policy": "GLOBAL_FALLBACK", "granted": "", "requested": "a", "error": "ILLEGAL_ARGUMENT" },
+    { "policy": "GLOBAL_FALLBACK", "granted": "a", "requested": "", "error": "ILLEGAL_ARGUMENT" },
+    { "policy": "EXACT", "granted": "", "requested": null, "error": "ILLEGAL_ARGUMENT" }
+  ],
+
+  "grants": [
+    { "rule": "students.read", "context": null, "text": "students.read" },
+    { "rule": "students.edit", "context": "academy:123", "text": "students.edit @ academy:123" },
+    { "rule": "-students.*", "context": "academy:123", "text": "-students.* @ academy:123" },
+    { "rule": "bad rule", "context": null, "error": "INVALID_PERMISSION" },
+    { "rule": "students.*.read", "context": "academy:123", "error": "INVALID_PERMISSION" },
+    { "rule": null, "context": null, "error": "INVALID_PERMISSION" },
+    { "rule": "students.read", "context": "", "error": "ILLEGAL_ARGUMENT" },
+    { "rule": "bad rule", "context": "", "error": "INVALID_PERMISSION" }
+  ],
+
+  "subjects": [
+    {
+      "name": "GLOBAL_FALLBACK: a context decides every node it covers, and falls back to global grants otherwise",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["students.delete", { "rule": "-students.*", "context": "academy:123" }],
+      "checks": [
+        {
+          "node": "students.delete",
+          "context": "academy:123",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [
+              { "rule": "-students.*", "context": "academy:123", "decisive": true, "deny": true, "wildcard": true },
+              { "rule": "students.delete" }
+            ]
+          }
+        },
+        {
+          "node": "students.delete",
+          "context": "academy:456",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "GLOBAL_FALLBACK",
+            "matches": [{ "rule": "students.delete", "decisive": true }]
+          }
+        },
+        {
+          "node": "students.delete",
+          "context": null,
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [{ "rule": "students.delete", "decisive": true }]
+          }
+        },
+        { "node": "students.read", "context": "academy:123", "allowed": false, "decision": "DENIED" },
+        {
+          "node": "students.read",
+          "context": "academy:456",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK"
+          }
+        },
+        { "node": "students.read", "context": null, "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "GLOBAL_FALLBACK: a context can re-allow what a global rule denies",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["-students.delete", "students.read", { "rule": "students.*", "context": "academy:123" }],
+      "checks": [
+        {
+          "node": "students.delete",
+          "context": "academy:123",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [
+              { "rule": "students.*", "context": "academy:123", "decisive": true, "wildcard": true },
+              { "rule": "-students.delete", "deny": true }
+            ]
+          }
+        },
+        {
+          "node": "students.delete",
+          "context": "academy:456",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "GLOBAL_FALLBACK",
+            "matches": [{ "rule": "-students.delete", "decisive": true, "deny": true }]
+          }
+        },
+        { "node": "students.delete", "context": null, "allowed": false, "decision": "DENIED" },
+        { "node": "students.read", "context": "academy:456", "allowed": true, "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "GLOBAL_FALLBACK: the context layer decides even with a less specific rule than the global one",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["-students.delete", { "rule": "*", "context": "academy:123" }],
+      "checks": [
+        { "node": "students.delete", "context": "academy:123", "allowed": true, "decision": "PERMITTED" },
+        { "node": "students.delete", "context": "academy:456", "allowed": false, "decision": "DENIED" }
+      ]
+    },
+    {
+      "name": "GLOBAL_FALLBACK: a check without a context does not see grants made in one",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": [{ "rule": "students.edit", "context": "academy:123" }],
+      "checks": [
+        {
+          "node": "students.edit",
+          "context": null,
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK"
+          }
+        },
+        { "node": "students.edit", "context": "academy:123", "allowed": true, "decision": "PERMITTED" },
+        { "node": "students.edit", "context": "academy:456", "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "GLOBAL_FALLBACK: a contextual deny does not reach a check without a context",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["students.*", { "rule": "-students.*", "context": "academy:123" }],
+      "checks": [
+        { "node": "students.edit", "context": null, "allowed": true, "decision": "PERMITTED" },
+        { "node": "students.edit", "context": "academy:123", "allowed": false, "decision": "DENIED" }
+      ]
+    },
+    {
+      "name": "EXACT: grants with and without a context are separate",
+      "policy": "EXACT",
+      "grants": [
+        "students.read",
+        { "rule": "students.edit", "context": "academy:1" },
+        { "rule": "-students.read", "context": "academy:2" }
+      ],
+      "checks": [
+        {
+          "node": "students.read",
+          "context": null,
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "EXACT",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [{ "rule": "students.read", "decisive": true }]
+          }
+        },
+        {
+          "node": "students.read",
+          "context": "academy:1",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "EXACT"
+          }
+        },
+        { "node": "students.edit", "context": "academy:1", "allowed": true, "decision": "PERMITTED" },
+        { "node": "students.edit", "context": null, "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "students.read", "context": "academy:2", "allowed": false, "decision": "DENIED" },
+        { "node": "students.read", "context": "academy:3", "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "contexts are opaque strings compared for equality only",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": [
+        { "rule": "x.wild", "context": "academy:*" },
+        { "rule": "x.parent", "context": "academy" },
+        { "rule": "x.space", "context": " " },
+        { "rule": "x.star", "context": "*" }
+      ],
+      "checks": [
+        { "node": "x.wild", "context": "academy:123", "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "x.wild", "context": "academy:*", "allowed": true, "decision": "PERMITTED" },
+        { "node": "x.parent", "context": "academy:123", "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "x.parent", "context": "academy", "allowed": true, "decision": "PERMITTED" },
+        { "node": "x.parent", "context": "Academy", "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "x.parent", "context": "academy ", "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "x.space", "context": " ", "allowed": true, "decision": "PERMITTED" },
+        { "node": "x.space", "context": null, "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "x.star", "context": "anything", "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "x.star", "context": "*", "allowed": true, "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "deny wins a tie inside the context layer, and global grants are reported but not decisive",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": [{ "rule": "a.b", "context": "c" }, { "rule": "-a.b", "context": "c" }, "a.b", "a.*"],
+      "checks": [
+        {
+          "node": "a.b",
+          "context": "c",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [
+              { "rule": "-a.b", "context": "c", "decisive": true, "deny": true },
+              { "rule": "a.b", "context": "c" },
+              { "rule": "a.b" },
+              { "rule": "a.*", "wildcard": true }
+            ]
+          }
+        },
+        { "node": "a.b", "context": "d", "allowed": true, "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "granting twice holds one grant; the same rule in another context is another grant",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["a.b", "a.b", { "rule": "a.b", "context": "c" }, { "rule": "a.b", "context": "c" }],
+      "checks": [
+        {
+          "node": "a.b",
+          "context": "c",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [{ "rule": "a.b", "context": "c", "decisive": true }, { "rule": "a.b" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "revoke removes exactly one rule in exactly one context",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["users.*", "users.create", { "rule": "users.create", "context": "c" }, "orders.read"],
+      "revoke": ["users.create", { "rule": "orders.read", "context": "c" }, "users.delete"],
+      "checks": [
+        {
+          "node": "users.create",
+          "context": null,
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [{ "rule": "users.*", "decisive": true, "wildcard": true }]
+          }
+        },
+        {
+          "node": "users.create",
+          "context": "c",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "decidingLayer": "EXACT_CONTEXT",
+            "matches": [
+              { "rule": "users.create", "context": "c", "decisive": true },
+              { "rule": "users.*", "wildcard": true }
+            ]
+          }
+        },
+        { "node": "orders.read", "context": null, "allowed": true, "decision": "PERMITTED" },
+        { "node": "users.delete", "context": null, "allowed": true, "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "revoking a deny rule restores what it carved out",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["users.*", "-users.delete"],
+      "revoke": ["-users.delete"],
+      "checks": [{ "node": "users.delete", "context": null, "allowed": true, "decision": "PERMITTED" }]
+    },
+    {
+      "name": "malformed checks are rejected, not answered",
+      "policy": "GLOBAL_FALLBACK",
+      "grants": ["*"],
+      "checks": [
+        { "node": "users.*", "context": null, "error": "INVALID_PERMISSION" },
+        { "node": "-users.read", "context": null, "error": "INVALID_PERMISSION" },
+        { "node": "", "context": null, "error": "INVALID_PERMISSION" },
+        { "node": null, "context": null, "error": "INVALID_PERMISSION" },
+        { "node": "users.read", "context": "", "error": "ILLEGAL_ARGUMENT" },
+        { "node": "users.*", "context": "", "error": "ILLEGAL_ARGUMENT" }
+      ]
+    }
+  ]
+}

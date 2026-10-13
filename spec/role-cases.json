@@ -1,0 +1,1208 @@
+{
+  "specVersion": 1,
+  "description": "Composite subjects, role and group definitions, role assignment cardinality, and how the permissions of several roles combine and are explained. See spec/README.md for the format.",
+
+  "ids": [
+    { "value": "admin", "valid": true },
+    { "value": "plan_pro", "valid": true },
+    { "value": "plan pro", "valid": true },
+    { "value": "\uad00\ub9ac\uc790", "valid": true },
+    { "value": "\u00a0admin", "valid": true },
+    { "value": "\u00a0", "valid": true },
+    { "value": "admin\ufeff", "valid": true },
+
+    { "value": null, "valid": false },
+    { "value": "", "valid": false },
+    { "value": " ", "valid": false },
+    { "value": "\t", "valid": false },
+    { "value": " admin", "valid": false },
+    { "value": "admin ", "valid": false },
+    { "value": "admin\n", "valid": false },
+    { "value": "\u001cadmin", "valid": false },
+    { "value": "\u2003admin", "valid": false },
+    { "value": "admin\u3000", "valid": false }
+  ],
+
+  "groupDefinitions": [
+    { "valid": true, "expectMin": 0, "expectMax": 2147483647 },
+    { "min": 0, "max": 1, "policy": "REJECT", "valid": true, "expectMin": 0, "expectMax": 1 },
+    { "min": 1, "max": 1, "policy": "REPLACE_EXISTING", "valid": true },
+    { "min": 3, "max": 3, "policy": "REJECT", "valid": true },
+    { "min": 2, "max": 3, "policy": "REPLACE_OLDEST", "valid": true },
+    { "min": 2, "max": 3, "policy": "REPLACE_NEWEST", "valid": true },
+    { "min": -1, "max": 1, "policy": "REJECT", "valid": false },
+    { "min": 0, "max": 0, "policy": "REJECT", "valid": false },
+    { "min": 0, "max": -1, "policy": "REJECT", "valid": false },
+    { "min": 2, "max": 1, "policy": "REJECT", "valid": false },
+    { "min": 2, "max": 3, "policy": "REPLACE_EXISTING", "valid": false }
+  ],
+
+  "composites": [
+    {
+      "name": "any source permits, and a deny rule only limits the source that holds it",
+      "sources": [
+        { "label": "own", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["profile.edit", "-users.delete"] },
+        { "label": "admins", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["users.*"] }
+      ],
+      "checks": [
+        {
+          "node": "users.delete",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "own" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK",
+                  "decidingLayer": "EXACT_CONTEXT",
+                  "matches": [{ "rule": "-users.delete", "decisive": true, "deny": true }]
+                }
+              },
+              {
+                "source": { "subject": "admins" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK",
+                  "decidingLayer": "EXACT_CONTEXT",
+                  "matches": [{ "rule": "users.*", "decisive": true, "wildcard": true }]
+                }
+              }
+            ]
+          }
+        },
+        { "node": "users.create", "allowed": true, "decision": "PERMITTED" },
+        { "node": "profile.edit", "allowed": true, "decision": "PERMITTED" },
+        {
+          "node": "orders.read",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "own" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "NOT_COVERED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK"
+                }
+              },
+              {
+                "source": { "subject": "admins" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "NOT_COVERED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a composite that no source permits reports DENIED if some source explicitly denies",
+      "sources": [
+        { "label": "own", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["-users.delete"] },
+        { "label": "other", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["profile.edit"] }
+      ],
+      "checks": [
+        {
+          "node": "users.delete",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "own" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK",
+                  "decidingLayer": "EXACT_CONTEXT",
+                  "matches": [{ "rule": "-users.delete", "decisive": true, "deny": true }]
+                }
+              },
+              {
+                "source": { "subject": "other" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "NOT_COVERED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a composite with no sources permits nothing",
+      "sources": [],
+      "checks": [
+        {
+          "node": "users.read",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "resolutionPolicy": "ANY_SOURCE"
+          }
+        },
+        { "node": "users.read", "context": "c", "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "the context is passed through, and each source applies its own policy",
+      "sources": [
+        { "label": "scoped", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": [{ "rule": "a.b", "context": "c" }] },
+        { "label": "exact", "kind": "memory", "policy": "EXACT", "grants": ["a.b"] }
+      ],
+      "checks": [
+        { "node": "a.b", "context": "c", "allowed": true, "decision": "PERMITTED" },
+        { "node": "a.b", "context": "d", "allowed": false, "decision": "NOT_COVERED" },
+        { "node": "a.b", "context": null, "allowed": true, "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "a source that cannot explain itself is reported with its answer only",
+      "sources": [
+        { "label": "opaque", "kind": "opaque", "policy": "GLOBAL_FALLBACK", "grants": ["x.y"] }
+      ],
+      "checks": [
+        {
+          "node": "x.y",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "PARTIAL",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "opaque" },
+                "decisive": true,
+                "explanation": { "allowed": true, "decision": "PERMITTED", "provenance": "UNAVAILABLE" }
+              }
+            ]
+          }
+        },
+        {
+          "node": "x.z",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": null,
+            "provenance": "UNAVAILABLE",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "opaque" },
+                "explanation": { "allowed": false, "decision": null, "provenance": "UNAVAILABLE" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "an opaque source next to an explaining one makes the explanation partial",
+      "sources": [
+        { "label": "opaque", "kind": "opaque", "policy": "GLOBAL_FALLBACK", "grants": [] },
+        { "label": "memory", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["-x.y"] }
+      ],
+      "checks": [
+        {
+          "node": "x.y",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "PARTIAL",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "opaque" },
+                "explanation": { "allowed": false, "decision": null, "provenance": "UNAVAILABLE" }
+              },
+              {
+                "source": { "subject": "memory" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK",
+                  "decidingLayer": "EXACT_CONTEXT",
+                  "matches": [{ "rule": "-x.y", "decisive": true, "deny": true }]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "node": "x.z",
+          "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": null,
+            "provenance": "PARTIAL",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "opaque" },
+                "explanation": { "allowed": false, "decision": null, "provenance": "UNAVAILABLE" }
+              },
+              {
+                "source": { "subject": "memory" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "NOT_COVERED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a failing source after the one that permits is left out; one the check reaches fails the check",
+      "sources": [
+        { "label": "memory", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["x.y"] },
+        { "label": "broken", "kind": "failing" }
+      ],
+      "checks": [
+        {
+          "node": "x.y",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "PARTIAL",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "memory" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK",
+                  "decidingLayer": "EXACT_CONTEXT",
+                  "matches": [{ "rule": "x.y", "decisive": true }]
+                }
+              }
+            ]
+          }
+        },
+        { "node": "x.z", "error": "ILLEGAL_STATE" }
+      ]
+    },
+    {
+      "name": "a failing source consulted before any permit fails the check",
+      "sources": [
+        { "label": "broken", "kind": "failing" },
+        { "label": "memory", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["x.y"] }
+      ],
+      "checks": [{ "node": "x.y", "error": "ILLEGAL_STATE" }]
+    },
+    {
+      "name": "composites nest, each reporting its own sources",
+      "sources": [
+        { "label": "own", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["profile.edit"] },
+        {
+          "label": "roles",
+          "kind": "composite",
+          "sources": [
+            { "label": "staff", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["-users.delete"] },
+            { "label": "admin", "kind": "memory", "policy": "GLOBAL_FALLBACK", "grants": ["users.*"] }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "node": "users.delete",
+          "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "resolutionPolicy": "ANY_SOURCE",
+            "contributions": [
+              {
+                "source": { "subject": "own" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "NOT_COVERED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK"
+                }
+              },
+              {
+                "source": { "subject": "roles" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "resolutionPolicy": "ANY_SOURCE",
+                  "contributions": [
+                    {
+                      "source": { "subject": "staff" },
+                      "explanation": {
+                        "allowed": false,
+                        "decision": "DENIED",
+                        "provenance": "COMPLETE",
+                        "contextPolicy": "GLOBAL_FALLBACK",
+                        "decidingLayer": "EXACT_CONTEXT",
+                        "matches": [{ "rule": "-users.delete", "decisive": true, "deny": true }]
+                      }
+                    },
+                    {
+                      "source": { "subject": "admin" },
+                      "decisive": true,
+                      "explanation": {
+                        "allowed": true,
+                        "decision": "PERMITTED",
+                        "provenance": "COMPLETE",
+                        "contextPolicy": "GLOBAL_FALLBACK",
+                        "decidingLayer": "EXACT_CONTEXT",
+                        "matches": [{ "rule": "users.*", "decisive": true, "wildcard": true }]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "malformed checks are rejected before any source is asked",
+      "sources": [{ "label": "broken", "kind": "failing" }],
+      "checks": [
+        { "node": "users.*", "error": "INVALID_PERMISSION" },
+        { "node": null, "error": "INVALID_PERMISSION" },
+        { "node": "users.read", "context": "", "error": "ILLEGAL_ARGUMENT" },
+        { "node": "users.*", "context": "", "error": "INVALID_PERMISSION" }
+      ]
+    }
+  ],
+
+  "scenarios": [
+    {
+      "name": "an exclusive group swaps one role for another with REPLACE_EXISTING",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "plan", "max": 1, "policy": "REPLACE_EXISTING" }],
+      "roles": [
+        { "id": "plan_pro", "group": "plan", "rules": ["app.use", "app.plan.pro"] },
+        { "id": "plan_max5", "group": "plan", "rules": ["app.use", "app.plan.max5"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "alice", "role": "plan_pro", "expect": { "status": "ASSIGNED", "removed": [], "current": "plan_pro" } },
+        { "op": "assign", "target": "alice", "role": "plan_pro", "expect": { "status": "NO_CHANGE", "removed": [], "current": "plan_pro" } },
+        { "op": "check", "target": "alice", "node": "app.plan.pro", "allowed": true, "decision": "PERMITTED" },
+        { "op": "assign", "target": "alice", "role": "plan_max5", "expect": { "status": "REPLACED", "removed": ["plan_pro"], "current": "plan_max5" } },
+        { "op": "roles", "target": "alice", "expect": ["plan_max5"] },
+        { "op": "check", "target": "alice", "node": "app.plan.max5", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "alice", "node": "app.plan.pro", "allowed": false, "decision": "NOT_COVERED" },
+        { "op": "check", "target": "alice", "node": "app.use", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "bob", "node": "app.use", "allowed": false, "decision": "NOT_COVERED" },
+        { "op": "unassign", "target": "alice", "role": "plan_pro", "expect": { "status": "NO_CHANGE", "removed": [], "current": null } },
+        { "op": "unassign", "target": "alice", "role": "plan_max5", "expect": { "status": "UNASSIGNED", "removed": ["plan_max5"], "current": null } },
+        { "op": "roles", "target": "alice", "expect": [] },
+        { "op": "assignments", "target": "alice", "expect": [] }
+      ]
+    },
+    {
+      "name": "REJECT keeps the roles the target has",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "team", "max": 2 }],
+      "roles": [
+        { "id": "a", "group": "team", "rules": ["x.a"] },
+        { "id": "b", "group": "team", "rules": ["x.b"] },
+        { "id": "c", "group": "team", "rules": ["x.c"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "b", "expect": { "status": "ASSIGNED", "removed": [], "current": "b" } },
+        {
+          "op": "assign", "target": "u", "role": "c",
+          "expect": {
+            "status": "REJECTED", "removed": [], "current": null,
+            "reason": "role group 'team' allows at most 2 role(s) and the target already holds 2"
+          }
+        },
+        { "op": "roles", "target": "u", "expect": ["a", "b"] },
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "NO_CHANGE", "removed": [], "current": "a" } },
+        { "op": "check", "target": "u", "node": "x.c", "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "REPLACE_OLDEST makes room by removing the longest-held role",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "team", "max": 2, "policy": "REPLACE_OLDEST" }],
+      "roles": [
+        { "id": "a", "group": "team", "rules": ["x.a"] },
+        { "id": "b", "group": "team", "rules": ["x.b"] },
+        { "id": "c", "group": "team", "rules": ["x.c"] },
+        { "id": "d", "group": "team", "rules": ["x.d"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "b", "expect": { "status": "ASSIGNED", "removed": [], "current": "b" } },
+        { "op": "assign", "target": "u", "role": "c", "expect": { "status": "REPLACED", "removed": ["a"], "current": "c" } },
+        { "op": "assignments", "target": "u", "expect": [{ "role": "b" }, { "role": "c" }] },
+        { "op": "assign", "target": "u", "role": "d", "expect": { "status": "REPLACED", "removed": ["b"], "current": "d" } },
+        { "op": "roles", "target": "u", "expect": ["c", "d"] }
+      ]
+    },
+    {
+      "name": "REPLACE_NEWEST makes room by removing the most recently assigned role",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "team", "max": 2, "policy": "REPLACE_NEWEST" }],
+      "roles": [
+        { "id": "a", "group": "team", "rules": ["x.a"] },
+        { "id": "b", "group": "team", "rules": ["x.b"] },
+        { "id": "c", "group": "team", "rules": ["x.c"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "b", "expect": { "status": "ASSIGNED", "removed": [], "current": "b" } },
+        { "op": "assign", "target": "u", "role": "c", "expect": { "status": "REPLACED", "removed": ["b"], "current": "c" } },
+        { "op": "assignments", "target": "u", "expect": [{ "role": "a" }, { "role": "c" }] }
+      ]
+    },
+    {
+      "name": "REPLACE_EXISTING in a larger group removes every held role of the group",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "team", "max": 2, "policy": "REPLACE_EXISTING" }],
+      "roles": [
+        { "id": "a", "group": "team", "rules": ["x.a"] },
+        { "id": "b", "group": "team", "rules": ["x.b"] },
+        { "id": "c", "group": "team", "rules": ["x.c"] },
+        { "id": "free", "rules": ["x.free"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "free", "expect": { "status": "ASSIGNED", "removed": [], "current": "free" } },
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "b", "expect": { "status": "ASSIGNED", "removed": [], "current": "b" } },
+        { "op": "assign", "target": "u", "role": "c", "expect": { "status": "REPLACED", "removed": ["a", "b"], "current": "c" } },
+        { "op": "assignments", "target": "u", "expect": [{ "role": "free" }, { "role": "c" }] }
+      ]
+    },
+    {
+      "name": "a group minimum rejects the unassignment that would go under it",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "tier", "min": 1, "max": 2 }],
+      "roles": [
+        { "id": "a", "group": "tier", "rules": ["x.a"] },
+        { "id": "b", "group": "tier", "rules": ["x.b"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        {
+          "op": "unassign", "target": "u", "role": "a",
+          "expect": {
+            "status": "REJECTED", "removed": [], "current": "a",
+            "reason": "role group 'tier' requires at least 1 role(s); unassigning would leave 0"
+          }
+        },
+        { "op": "assign", "target": "u", "role": "b", "expect": { "status": "ASSIGNED", "removed": [], "current": "b" } },
+        { "op": "unassign", "target": "u", "role": "a", "expect": { "status": "UNASSIGNED", "removed": ["a"], "current": null } },
+        { "op": "assign", "target": "u", "role": "a", "context": "academy:1", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        {
+          "op": "unassign", "target": "u", "role": "a", "context": "academy:1",
+          "expect": {
+            "status": "REJECTED", "removed": [], "current": "a",
+            "reason": "role group 'tier' requires at least 1 role(s) in context academy:1; unassigning would leave 0"
+          }
+        },
+        { "op": "assignments", "target": "u", "expect": [{ "role": "b" }, { "role": "a", "context": "academy:1" }] }
+      ]
+    },
+    {
+      "name": "group limits are counted per context, and roles without a context as one more context",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "school", "max": 1 }],
+      "roles": [
+        { "id": "teacher", "group": "school", "rules": ["students.read", "students.grade"] },
+        { "id": "student", "group": "school", "rules": ["lessons.read"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "teacher", "context": "academy:1", "expect": { "status": "ASSIGNED", "removed": [], "current": "teacher" } },
+        { "op": "assign", "target": "u", "role": "student", "context": "academy:2", "expect": { "status": "ASSIGNED", "removed": [], "current": "student" } },
+        {
+          "op": "assign", "target": "u", "role": "student", "context": "academy:1",
+          "expect": {
+            "status": "REJECTED", "removed": [], "current": null,
+            "reason": "role group 'school' allows at most 1 role(s) and the target already holds 1"
+          }
+        },
+        { "op": "assign", "target": "u", "role": "student", "expect": { "status": "ASSIGNED", "removed": [], "current": "student" } },
+        { "op": "assign", "target": "u", "role": "teacher", "expect": { "status": "REJECTED", "removed": [], "current": null } },
+        { "op": "assign", "target": "u", "role": "teacher", "context": "academy:1", "expect": { "status": "NO_CHANGE", "removed": [], "current": "teacher" } },
+        { "op": "roles", "target": "u", "context": "academy:1", "expect": ["teacher"] },
+        { "op": "roles", "target": "u", "context": "academy:2", "expect": ["student"] },
+        { "op": "roles", "target": "u", "expect": ["student"] },
+        { "op": "roles", "target": "u", "context": "academy:3", "expect": [] },
+        {
+          "op": "assignments", "target": "u",
+          "expect": [
+            { "role": "teacher", "context": "academy:1" },
+            { "role": "student", "context": "academy:2" },
+            { "role": "student" }
+          ]
+        },
+        { "op": "unassign", "target": "u", "role": "student", "context": "academy:1", "expect": { "status": "NO_CHANGE", "removed": [], "current": null } },
+        { "op": "unassign", "target": "u", "role": "student", "context": "academy:2", "expect": { "status": "UNASSIGNED", "removed": ["student"], "current": null } },
+        { "op": "roles", "target": "u", "expect": ["student"] }
+      ]
+    },
+    {
+      "name": "a replacement only removes roles held in the context being assigned in",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [{ "id": "school", "max": 1, "policy": "REPLACE_EXISTING" }],
+      "roles": [
+        { "id": "teacher", "group": "school", "rules": ["students.grade"] },
+        { "id": "student", "group": "school", "rules": ["lessons.read"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "teacher", "context": "academy:1", "expect": { "status": "ASSIGNED", "removed": [], "current": "teacher" } },
+        { "op": "assign", "target": "u", "role": "teacher", "expect": { "status": "ASSIGNED", "removed": [], "current": "teacher" } },
+        { "op": "assign", "target": "u", "role": "student", "context": "academy:1", "expect": { "status": "REPLACED", "removed": ["teacher"], "current": "student" } },
+        {
+          "op": "assignments", "target": "u",
+          "expect": [{ "role": "teacher" }, { "role": "student", "context": "academy:1" }]
+        }
+      ]
+    },
+    {
+      "name": "roles without a group are never limited",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "a", "rules": ["x.a"] },
+        { "id": "b", "rules": ["x.b"] },
+        { "id": "c", "rules": ["x.c"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "b", "expect": { "status": "ASSIGNED", "removed": [], "current": "b" } },
+        { "op": "assign", "target": "u", "role": "c", "expect": { "status": "ASSIGNED", "removed": [], "current": "c" } },
+        { "op": "roles", "target": "u", "expect": ["a", "b", "c"] },
+        { "op": "unassign", "target": "u", "role": "b", "expect": { "status": "UNASSIGNED", "removed": ["b"], "current": null } },
+        { "op": "roles", "target": "u", "expect": ["a", "c"] }
+      ]
+    },
+    {
+      "name": "two definitions of one group id fail the call and change nothing",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [
+        { "key": "plan-one", "id": "plan", "max": 1 },
+        { "key": "plan-two", "id": "plan", "max": 2 },
+        { "key": "plan-replace", "id": "plan", "max": 1, "policy": "REPLACE_EXISTING" },
+        { "key": "plan-same", "id": "plan", "max": 1 }
+      ],
+      "roles": [
+        { "id": "a", "group": "plan-one", "rules": ["x.a"] },
+        { "id": "b", "group": "plan-two", "rules": ["x.b"] },
+        { "id": "c", "group": "plan-replace", "rules": ["x.c"] },
+        { "id": "d", "group": "plan-same", "rules": ["x.d"] },
+        { "key": "a-redefined", "id": "a", "group": "plan-two", "rules": ["x.a"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "b", "error": "ILLEGAL_STATE" },
+        { "op": "assign", "target": "u", "role": "b", "context": "elsewhere", "error": "ILLEGAL_STATE" },
+        { "op": "assign", "target": "u", "role": "c", "error": "ILLEGAL_STATE" },
+        { "op": "assign", "target": "u", "role": "d", "expect": { "status": "REJECTED", "removed": [], "current": null } },
+        { "op": "unassign", "target": "u", "role": "a-redefined", "error": "ILLEGAL_STATE" },
+        { "op": "assignments", "target": "u", "expect": [{ "role": "a" }] }
+      ]
+    },
+    {
+      "name": "an assignment policy that breaks the group's limits fails the call and changes nothing",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "groups": [
+        { "id": "none", "max": 1, "policy": "BROKEN_REPLACE_NONE" },
+        { "id": "requested", "max": 1, "policy": "BROKEN_REPLACE_REQUESTED" }
+      ],
+      "roles": [
+        { "id": "a", "group": "none", "rules": ["x.a"] },
+        { "id": "b", "group": "none", "rules": ["x.b"] },
+        { "id": "c", "group": "requested", "rules": ["x.c"] },
+        { "id": "d", "group": "requested", "rules": ["x.d"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "b", "error": "ILLEGAL_STATE" },
+        { "op": "assign", "target": "u", "role": "c", "expect": { "status": "ASSIGNED", "removed": [], "current": "c" } },
+        { "op": "assign", "target": "u", "role": "d", "error": "ILLEGAL_STATE" },
+        { "op": "roles", "target": "u", "expect": ["a", "c"] }
+      ]
+    },
+    {
+      "name": "a role is identified by its id: a second definition of a held id is NO_CHANGE and keeps the first",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "a", "rules": ["x.first"] },
+        { "key": "a-second", "id": "a", "rules": ["x.second"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "a", "expect": { "status": "ASSIGNED", "removed": [], "current": "a" } },
+        { "op": "assign", "target": "u", "role": "a-second", "expect": { "status": "NO_CHANGE", "removed": [], "current": "a" } },
+        { "op": "check", "target": "u", "node": "x.first", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "u", "node": "x.second", "allowed": false, "decision": "NOT_COVERED" },
+        { "op": "unassign", "target": "u", "role": "a-second", "expect": { "status": "UNASSIGNED", "removed": ["a"], "current": null } },
+        { "op": "roles", "target": "u", "expect": [] }
+      ]
+    },
+    {
+      "name": "ALLOW_OVERRIDES and DENY_OVERRIDES differ only when one role denies what another permits",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "editor", "rules": ["docs.*"] },
+        { "id": "restricted", "rules": ["-docs.delete"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "both", "role": "editor", "expect": { "status": "ASSIGNED", "removed": [], "current": "editor" } },
+        { "op": "assign", "target": "both", "role": "restricted", "expect": { "status": "ASSIGNED", "removed": [], "current": "restricted" } },
+        { "op": "assign", "target": "only-restricted", "role": "restricted", "expect": { "status": "ASSIGNED", "removed": [], "current": "restricted" } },
+        {
+          "op": "check", "target": "both", "resolution": "ALLOW_OVERRIDES", "node": "docs.delete", "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "EXACT_CONTEXT",
+            "contributions": [
+              {
+                "source": { "role": "editor" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "docs.*", "decisive": true, "wildcard": true }]
+                }
+              },
+              {
+                "source": { "role": "restricted" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "-docs.delete", "decisive": true, "deny": true }]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "check", "target": "both", "resolution": "DENY_OVERRIDES", "node": "docs.delete", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "DENY_OVERRIDES",
+            "decidingLayer": "EXACT_CONTEXT",
+            "contributions": [
+              {
+                "source": { "role": "editor" },
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "docs.*", "decisive": true, "wildcard": true }]
+                }
+              },
+              {
+                "source": { "role": "restricted" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "-docs.delete", "decisive": true, "deny": true }]
+                }
+              }
+            ]
+          }
+        },
+        { "op": "check", "target": "both", "resolution": "ALLOW_OVERRIDES", "node": "docs.read", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "both", "resolution": "DENY_OVERRIDES", "node": "docs.read", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "both", "resolution": "DENY_OVERRIDES", "node": "orders.read", "allowed": false, "decision": "NOT_COVERED" },
+        {
+          "op": "check", "target": "only-restricted", "resolution": "ALLOW_OVERRIDES", "node": "docs.delete", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "EXACT_CONTEXT",
+            "contributions": [
+              {
+                "source": { "role": "restricted" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "-docs.delete", "decisive": true, "deny": true }]
+                }
+              }
+            ]
+          }
+        },
+        { "op": "check", "target": "only-restricted", "node": "docs.read", "allowed": false, "decision": "NOT_COVERED" },
+        { "op": "roleDenies", "role": "restricted", "node": "docs.delete", "expect": true },
+        { "op": "roleDenies", "role": "restricted", "node": "docs.read", "expect": false },
+        { "op": "roleDenies", "role": "editor", "node": "docs.delete", "expect": false },
+        { "op": "roleDenies", "role": "editor", "node": "docs.*", "error": "INVALID_PERMISSION" }
+      ]
+    },
+    {
+      "name": "context first: a role held in the checked context decides before roles held without one",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "admin", "rules": ["students.*"] },
+        { "id": "limited", "rules": ["-students.delete"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "admin", "expect": { "status": "ASSIGNED", "removed": [], "current": "admin" } },
+        { "op": "assign", "target": "u", "role": "limited", "context": "academy:1", "expect": { "status": "ASSIGNED", "removed": [], "current": "limited" } },
+        {
+          "op": "check", "target": "u", "node": "students.delete", "context": "academy:1", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "EXACT_CONTEXT",
+            "contributions": [
+              {
+                "source": { "role": "admin" },
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "students.*", "decisive": true, "wildcard": true }]
+                }
+              },
+              {
+                "source": { "role": "limited", "context": "academy:1" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "-students.delete", "decisive": true, "deny": true }]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "check", "target": "u", "node": "students.read", "context": "academy:1", "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "GLOBAL_FALLBACK",
+            "contributions": [
+              {
+                "source": { "role": "admin" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "students.*", "decisive": true, "wildcard": true }]
+                }
+              },
+              {
+                "source": { "role": "limited", "context": "academy:1" },
+                "explanation": { "allowed": false, "decision": "NOT_COVERED", "provenance": "COMPLETE" }
+              }
+            ]
+          }
+        },
+        {
+          "op": "check", "target": "u", "node": "students.delete", "context": "academy:2", "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "GLOBAL_FALLBACK",
+            "contributions": [
+              {
+                "source": { "role": "admin" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "students.*", "decisive": true, "wildcard": true }]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "check", "target": "u", "node": "students.delete", "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "EXACT_CONTEXT",
+            "contributions": [
+              {
+                "source": { "role": "admin" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "students.*", "decisive": true, "wildcard": true }]
+                }
+              }
+            ]
+          }
+        },
+        { "op": "check", "target": "u", "resolution": "DENY_OVERRIDES", "node": "students.delete", "context": "academy:1", "allowed": false, "decision": "DENIED" },
+        { "op": "check", "target": "u", "resolution": "DENY_OVERRIDES", "node": "students.delete", "context": "academy:2", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "u", "node": "orders.read", "context": "academy:1", "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "context first, reversed: a role held in the context re-allows what a global role denies",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "banned", "rules": ["-students.*"] },
+        { "id": "teacher", "rules": ["students.*"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "banned", "expect": { "status": "ASSIGNED", "removed": [], "current": "banned" } },
+        { "op": "assign", "target": "u", "role": "teacher", "context": "academy:1", "expect": { "status": "ASSIGNED", "removed": [], "current": "teacher" } },
+        { "op": "check", "target": "u", "node": "students.edit", "context": "academy:1", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "u", "resolution": "DENY_OVERRIDES", "node": "students.edit", "context": "academy:1", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "u", "node": "students.edit", "context": "academy:2", "allowed": false, "decision": "DENIED" },
+        { "op": "check", "target": "u", "node": "students.edit", "allowed": false, "decision": "DENIED" }
+      ]
+    },
+    {
+      "name": "EXACT: a role assigned without a context does not apply inside one",
+      "contextPolicy": "EXACT",
+      "roles": [
+        { "id": "admin", "rules": ["students.*"] },
+        { "id": "teacher", "rules": ["students.grade"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "admin", "expect": { "status": "ASSIGNED", "removed": [], "current": "admin" } },
+        { "op": "assign", "target": "u", "role": "teacher", "context": "academy:1", "expect": { "status": "ASSIGNED", "removed": [], "current": "teacher" } },
+        {
+          "op": "check", "target": "u", "node": "students.delete", "context": "academy:1", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "EXACT",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "contributions": [
+              {
+                "source": { "role": "teacher", "context": "academy:1" },
+                "explanation": { "allowed": false, "decision": "NOT_COVERED", "provenance": "COMPLETE" }
+              }
+            ]
+          }
+        },
+        { "op": "check", "target": "u", "node": "students.grade", "context": "academy:1", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "u", "node": "students.delete", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "u", "node": "students.grade", "context": "academy:2", "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "a role built from rules answers only checks without a context",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [{ "id": "editor", "rules": ["docs.*", "-docs.delete"] }],
+      "steps": [
+        { "op": "rolePermits", "role": "editor", "node": "docs.read", "expect": true },
+        { "op": "rolePermits", "role": "editor", "node": "docs.delete", "expect": false },
+        { "op": "rolePermits", "role": "editor", "node": "docs.read", "context": "academy:1", "expect": false },
+        { "op": "rolePermits", "role": "editor", "node": "docs.read", "context": "", "error": "ILLEGAL_ARGUMENT" },
+        { "op": "rolePermits", "role": "editor", "node": "docs.*", "error": "INVALID_PERMISSION" },
+        { "op": "roleDenies", "role": "editor", "node": "docs.delete", "expect": true },
+        { "op": "roleDenies", "role": "editor", "node": "orders.read", "expect": false }
+      ]
+    },
+    {
+      "name": "a role backed by a subject is asked without a context, and counted only by whether it permits",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        {
+          "id": "db",
+          "subject": {
+            "kind": "memory", "policy": "GLOBAL_FALLBACK",
+            "grants": ["reports.*", "-reports.secret", { "rule": "audit.scoped", "context": "c" }, { "rule": "-reports.read", "context": "c" }]
+          }
+        },
+        { "id": "open", "rules": ["reports.secret"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "db", "expect": { "status": "ASSIGNED", "removed": [], "current": "db" } },
+        { "op": "assign", "target": "ctx", "role": "db", "context": "c", "expect": { "status": "ASSIGNED", "removed": [], "current": "db" } },
+        { "op": "assign", "target": "both", "role": "db", "expect": { "status": "ASSIGNED", "removed": [], "current": "db" } },
+        { "op": "assign", "target": "both", "role": "open", "expect": { "status": "ASSIGNED", "removed": [], "current": "open" } },
+        { "op": "check", "target": "u", "node": "reports.read", "allowed": true, "decision": "PERMITTED" },
+        {
+          "op": "check", "target": "u", "node": "reports.secret", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "contributions": [
+              {
+                "source": { "role": "db" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "contextPolicy": "GLOBAL_FALLBACK",
+                  "decidingLayer": "EXACT_CONTEXT",
+                  "matches": [
+                    { "rule": "-reports.secret", "decisive": true, "deny": true },
+                    { "rule": "reports.*", "wildcard": true }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        { "op": "roleDenies", "role": "db", "node": "reports.secret", "expect": false },
+        { "op": "check", "target": "both", "resolution": "DENY_OVERRIDES", "node": "reports.secret", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "ctx", "node": "reports.read", "context": "c", "allowed": true, "decision": "PERMITTED" },
+        { "op": "check", "target": "ctx", "node": "audit.scoped", "context": "c", "allowed": false, "decision": "NOT_COVERED" },
+        { "op": "check", "target": "ctx", "node": "reports.read", "allowed": false, "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "a role backed by a subject that cannot explain itself makes the explanation partial",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "legacy", "subject": { "kind": "opaque", "policy": "GLOBAL_FALLBACK", "grants": ["x.y"] } },
+        { "id": "plain", "rules": ["x.z"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "legacy", "expect": { "status": "ASSIGNED", "removed": [], "current": "legacy" } },
+        { "op": "assign", "target": "u", "role": "plain", "expect": { "status": "ASSIGNED", "removed": [], "current": "plain" } },
+        {
+          "op": "check", "target": "u", "node": "x.y", "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "PARTIAL",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "EXACT_CONTEXT",
+            "contributions": [
+              {
+                "source": { "role": "legacy" },
+                "decisive": true,
+                "explanation": { "allowed": true, "decision": "PERMITTED", "provenance": "UNAVAILABLE" }
+              },
+              {
+                "source": { "role": "plain" },
+                "explanation": { "allowed": false, "decision": "NOT_COVERED", "provenance": "COMPLETE" }
+              }
+            ]
+          }
+        },
+        {
+          "op": "check", "target": "u", "node": "x.other", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "PARTIAL",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "contributions": [
+              {
+                "source": { "role": "legacy" },
+                "explanation": { "allowed": false, "decision": null, "provenance": "UNAVAILABLE" }
+              },
+              {
+                "source": { "role": "plain" },
+                "explanation": { "allowed": false, "decision": "NOT_COVERED", "provenance": "COMPLETE" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a custom resolution policy is explained with its answer and the roles, none decisive",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "editor", "rules": ["docs.*"] },
+        { "id": "restricted", "rules": ["-docs.delete"] }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "editor", "expect": { "status": "ASSIGNED", "removed": [], "current": "editor" } },
+        { "op": "assign", "target": "u", "role": "restricted", "context": "c", "expect": { "status": "ASSIGNED", "removed": [], "current": "restricted" } },
+        {
+          "op": "check", "target": "u", "resolution": "CUSTOM_ANY", "node": "docs.delete", "context": "c", "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "PARTIAL",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "contributions": [
+              {
+                "source": { "role": "editor" },
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "docs.*", "decisive": true, "wildcard": true }]
+                }
+              },
+              {
+                "source": { "role": "restricted", "context": "c" },
+                "explanation": {
+                  "allowed": false,
+                  "decision": "DENIED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "-docs.delete", "decisive": true, "deny": true }]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "check", "target": "u", "resolution": "CUSTOM_ANY", "node": "orders.read", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": null,
+            "provenance": "PARTIAL",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "contributions": [
+              {
+                "source": { "role": "editor" },
+                "explanation": { "allowed": false, "decision": "NOT_COVERED", "provenance": "COMPLETE" }
+              }
+            ]
+          }
+        },
+        {
+          "op": "check", "target": "nobody", "resolution": "CUSTOM_ANY", "node": "orders.read", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": null,
+            "provenance": "UNAVAILABLE",
+            "contextPolicy": "GLOBAL_FALLBACK"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a failing role the check does not reach is left out; one it reaches fails the check",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [
+        { "id": "ok", "rules": ["x.y"] },
+        { "id": "broken", "subject": { "kind": "failing" } }
+      ],
+      "steps": [
+        { "op": "assign", "target": "u", "role": "ok", "expect": { "status": "ASSIGNED", "removed": [], "current": "ok" } },
+        { "op": "assign", "target": "u", "role": "broken", "expect": { "status": "ASSIGNED", "removed": [], "current": "broken" } },
+        {
+          "op": "check", "target": "u", "node": "x.y", "allowed": true,
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "PARTIAL",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES",
+            "decidingLayer": "EXACT_CONTEXT",
+            "contributions": [
+              {
+                "source": { "role": "ok" },
+                "decisive": true,
+                "explanation": {
+                  "allowed": true,
+                  "decision": "PERMITTED",
+                  "provenance": "COMPLETE",
+                  "matches": [{ "rule": "x.y", "decisive": true }]
+                }
+              }
+            ]
+          }
+        },
+        { "op": "check", "target": "u", "node": "x.z", "error": "ILLEGAL_STATE" },
+        { "op": "check", "target": "u", "resolution": "DENY_OVERRIDES", "node": "x.y", "error": "ILLEGAL_STATE" }
+      ]
+    },
+    {
+      "name": "a target with no roles is permitted nothing, and malformed input is rejected",
+      "contextPolicy": "GLOBAL_FALLBACK",
+      "roles": [{ "id": "a", "rules": ["x.a"] }],
+      "steps": [
+        {
+          "op": "check", "target": "nobody", "node": "x.a", "allowed": false,
+          "explanation": {
+            "allowed": false,
+            "decision": "NOT_COVERED",
+            "provenance": "COMPLETE",
+            "contextPolicy": "GLOBAL_FALLBACK",
+            "resolutionPolicy": "ALLOW_OVERRIDES"
+          }
+        },
+        { "op": "check", "target": "nobody", "node": "x.*", "error": "INVALID_PERMISSION" },
+        { "op": "check", "target": "nobody", "node": null, "error": "INVALID_PERMISSION" },
+        { "op": "check", "target": "nobody", "node": "x.a", "context": "", "error": "ILLEGAL_ARGUMENT" },
+        { "op": "check", "target": "nobody", "node": "x.*", "context": "", "error": "INVALID_PERMISSION" },
+        { "op": "assign", "target": "u", "role": "a", "context": "", "error": "ILLEGAL_ARGUMENT" },
+        { "op": "unassign", "target": "u", "role": "a", "context": "", "error": "ILLEGAL_ARGUMENT" },
+        { "op": "roles", "target": "u", "context": "", "error": "ILLEGAL_ARGUMENT" },
+        { "op": "assignments", "target": "u", "expect": [] }
+      ]
+    }
+  ]
+}

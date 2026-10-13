@@ -1,0 +1,2 @@
+# Fixtures are read byte-for-byte by every implementation.
+* text=auto eol=lf

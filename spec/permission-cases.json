@@ -1,0 +1,365 @@
+{
+  "specVersion": 1,
+  "description": "Permission node and rule syntax, single-rule matching, and rule-set precedence. See spec/README.md for the format.",
+
+  "nodes": [
+    { "value": "users", "valid": true },
+    { "value": "users.create", "valid": true },
+    { "value": "users.profile.edit", "valid": true },
+    { "value": "a", "valid": true },
+    { "value": "0", "valid": true },
+    { "value": "_", "valid": true },
+    { "value": "A1_b-c", "valid": true },
+    { "value": "users.soft-delete", "valid": true },
+    { "value": "users.-x", "valid": true },
+    { "value": "a-", "valid": true },
+    { "value": "Users.Create", "valid": true },
+
+    { "value": null, "valid": false },
+    { "value": "", "valid": false },
+    { "value": " ", "valid": false },
+    { "value": "\t", "valid": false },
+    { "value": "users..create", "valid": false },
+    { "value": ".users", "valid": false },
+    { "value": "users.", "valid": false },
+    { "value": ".", "valid": false },
+    { "value": "-users", "valid": false },
+    { "value": "-users.delete", "valid": false },
+    { "value": "--users", "valid": false },
+    { "value": "-", "valid": false },
+    { "value": "*", "valid": false },
+    { "value": "users.*", "valid": false },
+    { "value": "users.*.read", "valid": false },
+    { "value": "users create", "valid": false },
+    { "value": " users", "valid": false },
+    { "value": "users ", "valid": false },
+    { "value": "users\n", "valid": false },
+    { "value": "users/create", "valid": false },
+    { "value": "users:create", "valid": false },
+    { "value": "users.cr\u00e9ate", "valid": false },
+    { "value": "\uc0ac\uc6a9\uc790.\uc0dd\uc131", "valid": false }
+  ],
+
+  "rules": [
+    { "value": "users.create", "valid": true },
+    { "value": "users", "valid": true },
+    { "value": "users.*", "valid": true },
+    { "value": "a.b.c.*", "valid": true },
+    { "value": "*", "valid": true },
+    { "value": "-users.delete", "valid": true },
+    { "value": "-users.*", "valid": true },
+    { "value": "-*", "valid": true },
+    { "value": "users.soft-delete", "valid": true },
+    { "value": "users.-x", "valid": true },
+    { "value": "-users.-x", "valid": true },
+
+    { "value": null, "valid": false },
+    { "value": "", "valid": false },
+    { "value": " ", "valid": false },
+    { "value": "-", "valid": false },
+    { "value": "--users", "valid": false },
+    { "value": "--*", "valid": false },
+    { "value": "users.*.read", "valid": false },
+    { "value": "*.users", "valid": false },
+    { "value": "*.*", "valid": false },
+    { "value": "-*.*", "valid": false },
+    { "value": "**", "valid": false },
+    { "value": "users.**", "valid": false },
+    { "value": "users.*x", "valid": false },
+    { "value": "users.x*", "valid": false },
+    { "value": "users..*", "valid": false },
+    { "value": ".*", "valid": false },
+    { "value": "users.", "valid": false },
+    { "value": "-.users", "valid": false },
+    { "value": "- users", "valid": false },
+    { "value": "users.* ", "valid": false },
+    { "value": "users.create\n", "valid": false }
+  ],
+
+  "nodeRelations": [
+    {
+      "node": "users.profile.edit",
+      "segments": ["users", "profile", "edit"],
+      "parent": "users.profile",
+      "childOf": [
+        { "other": "users", "expected": true },
+        { "other": "users.profile", "expected": true },
+        { "other": "users.profile.edit", "expected": false },
+        { "other": "users.profile.edit.more", "expected": false },
+        { "other": "user", "expected": false },
+        { "other": "users.pro", "expected": false },
+        { "other": "profile", "expected": false }
+      ]
+    },
+    {
+      "node": "users",
+      "segments": ["users"],
+      "parent": null,
+      "childOf": [
+        { "other": "users", "expected": false },
+        { "other": "u", "expected": false }
+      ]
+    }
+  ],
+
+  "ruleMatching": [
+    { "rule": "users.create", "node": "users.create", "matches": true, "denies": false },
+    { "rule": "users.create", "node": "users.delete", "matches": false, "denies": false },
+    { "rule": "users.create", "node": "users", "matches": false, "denies": false },
+    { "rule": "users.create", "node": "users.create.draft", "matches": false, "denies": false },
+    { "rule": "Users.create", "node": "users.create", "matches": false, "denies": false },
+    { "rule": "users.*", "node": "users", "matches": true, "denies": false },
+    { "rule": "users.*", "node": "users.create", "matches": true, "denies": false },
+    { "rule": "users.*", "node": "users.profile.edit", "matches": true, "denies": false },
+    { "rule": "users.*", "node": "usersx", "matches": false, "denies": false },
+    { "rule": "users.*", "node": "usersx.create", "matches": false, "denies": false },
+    { "rule": "users.*", "node": "user", "matches": false, "denies": false },
+    { "rule": "*", "node": "anything.at.all", "matches": true, "denies": false },
+    { "rule": "*", "node": "x", "matches": true, "denies": false },
+    { "rule": "-users.delete", "node": "users.delete", "matches": false, "denies": true },
+    { "rule": "-users.delete", "node": "users.delete.hard", "matches": false, "denies": false },
+    { "rule": "-users.delete", "node": "users.create", "matches": false, "denies": false },
+    { "rule": "-users.*", "node": "users.delete", "matches": false, "denies": true },
+    { "rule": "-users.*", "node": "users", "matches": false, "denies": true },
+    { "rule": "-users.*", "node": "orders.read", "matches": false, "denies": false },
+    { "rule": "-*", "node": "x.y", "matches": false, "denies": true },
+    { "rule": "users.delete", "node": "users.delete", "matches": true, "denies": false },
+
+    { "rule": "users.*.read", "node": "users.x.read", "error": "INVALID_PERMISSION" },
+    { "rule": "users.*", "node": "users.*", "error": "INVALID_PERMISSION" },
+    { "rule": "users.create", "node": "-users.create", "error": "INVALID_PERMISSION" },
+    { "rule": "", "node": "users", "error": "INVALID_PERMISSION" },
+    { "rule": "--a", "node": "a", "error": "INVALID_PERMISSION" },
+    { "rule": "*", "node": "", "error": "INVALID_PERMISSION" },
+    { "rule": "*", "node": "*", "error": "INVALID_PERMISSION" }
+  ],
+
+  "ruleSets": [
+    {
+      "name": "default deny: no rules cover nothing",
+      "rules": [],
+      "checks": [
+        {
+          "node": "users.create",
+          "decision": "NOT_COVERED",
+          "explanation": { "allowed": false, "decision": "NOT_COVERED", "provenance": "COMPLETE" }
+        }
+      ]
+    },
+    {
+      "name": "exact rule covers exactly its own node",
+      "rules": ["users.create"],
+      "checks": [
+        {
+          "node": "users.create",
+          "decision": "PERMITTED",
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "matches": [{ "rule": "users.create", "decisive": true }]
+          }
+        },
+        { "node": "users.delete", "decision": "NOT_COVERED" },
+        { "node": "users", "decision": "NOT_COVERED" },
+        { "node": "users.create.draft", "decision": "NOT_COVERED" },
+        { "node": "Users.create", "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "trailing wildcard covers its prefix and everything under it",
+      "rules": ["users.*"],
+      "checks": [
+        { "node": "users", "decision": "PERMITTED" },
+        { "node": "users.create", "decision": "PERMITTED" },
+        { "node": "users.profile.edit", "decision": "PERMITTED" },
+        { "node": "userss", "decision": "NOT_COVERED" },
+        { "node": "user", "decision": "NOT_COVERED" },
+        { "node": "orders.users", "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "root wildcard covers every node",
+      "rules": ["*"],
+      "checks": [
+        {
+          "node": "anything.at.all",
+          "decision": "PERMITTED",
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "matches": [{ "rule": "*", "decisive": true, "wildcard": true }]
+          }
+        },
+        { "node": "x", "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "an exact deny carves one node out of a wildcard allow",
+      "rules": ["users.*", "-users.delete"],
+      "checks": [
+        { "node": "users.create", "decision": "PERMITTED" },
+        {
+          "node": "users.delete",
+          "decision": "DENIED",
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "matches": [
+              { "rule": "-users.delete", "decisive": true, "deny": true },
+              { "rule": "users.*", "wildcard": true }
+            ]
+          }
+        },
+        { "node": "users.delete.hard", "decision": "PERMITTED" },
+        { "node": "orders.read", "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "an exact allow re-opens one node inside a wildcard deny",
+      "rules": ["-users.*", "users.read"],
+      "checks": [
+        { "node": "users.read", "decision": "PERMITTED" },
+        { "node": "users.write", "decision": "DENIED" },
+        { "node": "users", "decision": "DENIED" },
+        { "node": "users.read.all", "decision": "DENIED" },
+        { "node": "orders.read", "decision": "NOT_COVERED" }
+      ]
+    },
+    {
+      "name": "deny wins a tie between equally specific rules, in either order",
+      "rules": ["users.delete", "-users.delete", "-orders.*", "orders.*"],
+      "checks": [
+        {
+          "node": "users.delete",
+          "decision": "DENIED",
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "matches": [
+              { "rule": "-users.delete", "decisive": true, "deny": true },
+              { "rule": "users.delete" }
+            ]
+          }
+        },
+        { "node": "orders.read", "decision": "DENIED" },
+        { "node": "orders", "decision": "DENIED" }
+      ]
+    },
+    {
+      "name": "deny wins a tie at the root",
+      "rules": ["*", "-*"],
+      "checks": [
+        {
+          "node": "x",
+          "decision": "DENIED",
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "matches": [
+              { "rule": "-*", "decisive": true, "deny": true, "wildcard": true },
+              { "rule": "*", "wildcard": true }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "the most specific covering rule decides, through four levels",
+      "rules": ["*", "-users.*", "users.profile.*", "-users.profile.delete"],
+      "checks": [
+        { "node": "orders.read", "decision": "PERMITTED" },
+        { "node": "users.list", "decision": "DENIED" },
+        { "node": "users", "decision": "DENIED" },
+        { "node": "users.profile", "decision": "PERMITTED" },
+        { "node": "users.profile.edit", "decision": "PERMITTED" },
+        {
+          "node": "users.profile.delete",
+          "decision": "DENIED",
+          "explanation": {
+            "allowed": false,
+            "decision": "DENIED",
+            "provenance": "COMPLETE",
+            "matches": [
+              { "rule": "-users.profile.delete", "decisive": true, "deny": true },
+              { "rule": "users.profile.*", "wildcard": true },
+              { "rule": "-users.*", "deny": true, "wildcard": true },
+              { "rule": "*", "wildcard": true }
+            ]
+          }
+        },
+        { "node": "users.profile.delete.now", "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "an exact rule beats a wildcard rooted at the same node",
+      "rules": ["-a.b.*", "a.b"],
+      "checks": [
+        { "node": "a.b", "decision": "PERMITTED" },
+        { "node": "a.b.c", "decision": "DENIED" }
+      ]
+    },
+    {
+      "name": "an exact deny beats a wildcard allow rooted at the same node",
+      "rules": ["a.b.*", "-a.b"],
+      "checks": [
+        { "node": "a.b", "decision": "DENIED" },
+        { "node": "a.b.c", "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "a wildcard deny removes the node and its whole subtree",
+      "rules": ["users.*", "-users.delete.*"],
+      "checks": [
+        { "node": "users.delete", "decision": "DENIED" },
+        { "node": "users.delete.hard", "decision": "DENIED" },
+        { "node": "users.deleted", "decision": "PERMITTED" }
+      ]
+    },
+    {
+      "name": "a repeated rule is reported once per occurrence, each decisive",
+      "rules": ["users.*", "users.*"],
+      "checks": [
+        {
+          "node": "users.x",
+          "decision": "PERMITTED",
+          "explanation": {
+            "allowed": true,
+            "decision": "PERMITTED",
+            "provenance": "COMPLETE",
+            "matches": [
+              { "rule": "users.*", "decisive": true, "wildcard": true },
+              { "rule": "users.*", "decisive": true, "wildcard": true }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "an invalid rule anywhere is reported, even after a covering rule",
+      "rules": ["users.create", "users.*.read"],
+      "checks": [{ "node": "users.create", "error": "INVALID_PERMISSION" }]
+    },
+    {
+      "name": "a null rule is invalid",
+      "rules": ["users.create", null],
+      "checks": [{ "node": "users.create", "error": "INVALID_PERMISSION" }]
+    },
+    {
+      "name": "the checked value has to be a node, not a rule",
+      "rules": ["users.*", "-users.read"],
+      "checks": [
+        { "node": "users.*", "error": "INVALID_PERMISSION" },
+        { "node": "-users.read", "error": "INVALID_PERMISSION" },
+        { "node": "*", "error": "INVALID_PERMISSION" },
+        { "node": "", "error": "INVALID_PERMISSION" },
+        { "node": null, "error": "INVALID_PERMISSION" },
+        { "node": "users..read", "error": "INVALID_PERMISSION" }
+      ]
+    }
+  ]
+}
