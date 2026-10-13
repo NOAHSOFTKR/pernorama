@@ -19,6 +19,11 @@ implementing `PermissionSubject` yourself; see
 
 > **Status: Beta (`0.3.0`)** — see [API Stability](#api-stability).
 
+A **TypeScript SDK** with the same authorization rules lives in
+[`typescript/`](typescript/README.md); see
+[TypeScript SDK](#typescript-sdk). This README documents the Java
+library.
+
 ## Installation
 
 Pernorama is published to a self-hosted Maven repository at
@@ -83,6 +88,10 @@ environment variables). Versions ending in `-SNAPSHOT` go to
 Pushing a `v*` tag also publishes automatically via
 `.github/workflows/publish.yml`, using the `REPOSILITE_USERNAME` /
 `REPOSILITE_PASSWORD` repository secrets.
+
+`v*` tags release the Java artifact only. The TypeScript package is
+versioned and released separately, on `ts-v*` tags; see
+[Releasing](typescript/README.md#releasing) in its README.
 
 ## Quick Start
 
@@ -960,6 +969,53 @@ the answer is listed.
 - Any custom `PermissionSubject` implementation defines its own
   thread-safety; document it the way `MemoryPermissionSubject` does here
   if you expect concurrent callers.
+
+## TypeScript SDK
+
+[`typescript/`](typescript/README.md) holds `@noahsoft/pernorama`, a
+TypeScript implementation of the same model for Node.js services:
+permission nodes, wildcards and deny rules, contexts and
+`ContextPolicy`, `MemoryPermissionSubject` and
+`CompositePermissionSubject`, roles, role groups and assignments, and
+`PermissionExplanation`. It has no runtime dependencies, and is
+versioned and released independently of the Java artifact (it starts at
+`0.1.0` and is **not yet published to npm**).
+
+```ts
+import { MemoryPermissionSubject, Permission } from '@noahsoft/pernorama';
+
+const user = new MemoryPermissionSubject(['users.*', '-users.delete']);
+
+Permission.check(user, 'users.create'); // true
+Permission.check(user, 'users.delete'); // false
+```
+
+The Java implementation in this repository is the reference for what a
+rule means. So that the two cannot drift apart, the cases that define
+it — syntax, wildcard matching, deny precedence, context resolution,
+role cardinality, cross-role denies, explanations — are written once,
+as language-neutral JSON in [`spec/`](spec/README.md), and **both test
+suites run those same files**: `pernorama.conformance.ConformanceTest`
+here, and `typescript/test/conformance` there.
+
+Two things differ by design, and are documented in the TypeScript
+README rather than papered over:
+
+- **`@Perm` enforcement.** In Java, `@Perm` is metadata that only
+  `PermissionInterceptor` enforces, and only for calls made through it
+  (see [Annotations](#annotations)). In TypeScript there is no
+  reflective proxy to opt into, so `@Perm` is a standard decorator that
+  wraps the method and checks every call, resolving the subject through
+  a strategy the application configures explicitly. Its
+  [security limitations](typescript/README.md#security-limitations) are
+  listed there.
+- **I/O.** A permission check is synchronous in both languages. The
+  TypeScript SDK adds asynchronous variants only where Node.js needs
+  them: a role-assignment store backed by a database, and resolving the
+  subject of a decorated call.
+
+`PermissionInterceptor` itself is not ported. Framework, database,
+Discord and JWT integrations are not part of either core.
 
 ## API Stability
 

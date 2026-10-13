@@ -23,3 +23,76 @@ jobs:
 
       - name: Build and test
         run: ./gradlew build --no-daemon
+
+  typescript:
+    name: typescript (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate the package contents
+        run: npm run check:package
+
+      - name: Install the tarball into ESM, CommonJS and TypeScript consumers
+        run: npm run smoke
+
+  # The same fixtures in spec/ have to pass in both languages, from one checkout.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Fixtures are well-formed JSON of a known version
+        run: |
+          for fixture in spec/*-cases.json; do
+            node -e '
+              const spec = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+              if (spec.specVersion !== 1) throw new Error(process.argv[1] + ": unexpected specVersion " + spec.specVersion);
+            ' "$fixture"
+          done
+
+      - name: Java conformance
+        run: ./gradlew test --no-daemon --tests 'pernorama.conformance.*'
+
+      - name: TypeScript conformance
+        working-directory: typescript
+        run: |
+          npm ci
+          npm run test:conformance

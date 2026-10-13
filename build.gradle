@@ -22,10 +22,15 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // reads the shared conformance fixtures in spec/; tests only
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
 }
 
 test {
     useJUnitPlatform()
+    // the Java/TypeScript conformance fixtures; see pernorama.conformance.ConformanceTest
+    inputs.dir('spec').withPropertyName('conformanceFixtures').withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty 'pernorama.spec.dir', file('spec').absolutePath
 }
 
 publishing {
